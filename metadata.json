@@ -1,0 +1,7 @@
+{
+  "name": "HotelOSDirector's",
+  "description": "A premium hotel management dashboard for directors and staff, featuring calendar sync, tasks, and VIP management.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
