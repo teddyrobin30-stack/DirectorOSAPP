@@ -62,7 +62,7 @@ const AgendaView: React.FC<AgendaViewProps> = ({ events, todos, userSettings, on
     // Filter Pipeline Groups
     let dayGroups = groups.filter(g => g.startDate && g.endDate && isDateInRange(date, g.startDate, g.endDate));
     
-    // ✅ CORRECTION ICI : Utilisation de 'dueDate' au lieu de 'date'
+    // ✅ Utilisation de 'dueDate' pour les tâches
     let dayTasks = todos.filter(t => t.dueDate && isSameDay(safeDate(t.dueDate), date));
 
     if (activeFilter !== 'ALL') {
@@ -175,17 +175,21 @@ const AgendaView: React.FC<AgendaViewProps> = ({ events, todos, userSettings, on
                 {g.name} <span className="opacity-60 font-normal">({isConfirmed ? 'Confirmé' : 'Option'})</span>
               </h4>
               <div className={`flex items-center gap-3 mt-2 text-[10px] font-medium ${isConfirmed ? 'text-violet-400' : 'text-amber-500'}`}>
-                 <span>{g.pax} PAX</span>
-                 <span>•</span>
-                 <span>{g.nights} Nuits</span>
+                  <span>{g.pax} PAX</span>
+                  <span>•</span>
+                  <span>{g.nights} Nuits</span>
               </div>
             </div>
           );
         })}
 
-        {/* TASKS */}
+        {/* TASKS - ✅ MAINTENANT CLIQUABLES */}
         {dTasks.map(t => (
-          <div key={`t-${t.id}`} className={`p-5 rounded-[28px] border-2 shadow-sm transition-all ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-emerald-50/30 border-emerald-100'}`}>
+          <div 
+            key={`t-${t.id}`} 
+            onClick={() => onEventClick(t as any)} // <-- AJOUT DU CLICK ICI
+            className={`p-5 rounded-[28px] border-2 shadow-sm transition-all cursor-pointer hover:border-emerald-200 active:scale-[0.98] ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-emerald-50/30 border-emerald-100'}`}
+          >
             <span className="text-[8px] font-black uppercase text-emerald-600 mb-1.5 block flex items-center gap-1 tracking-widest">
               <CheckCircle2 size={10} /> Tâche • {t.tag}
             </span>
