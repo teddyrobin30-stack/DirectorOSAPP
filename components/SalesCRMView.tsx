@@ -228,14 +228,13 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
   const [inboxSort, setInboxSort] = useState<'date_desc' | 'date_asc' | 'urgency' | 'event_date' | 'alpha'>('date_desc');
   const [inboxFilter, setInboxFilter] = useState<'ALL' | 'URGENT' | 'EMAIL' | 'PHONE' | 'WEB' | 'THIS_MONTH'>('ALL');
 
-  // VIP select states
+  // Contact select states (kept naming to avoid breaking anything)
   const [selectedVipId, setSelectedVipId] = useState<string>('');
   const [selectedInboxVipId, setSelectedInboxVipId] = useState<string>('');
 
+  // ✅ IMPORTANT FIX: Use CONTACTS FROM APPLICATION (clients) — no group contacts, no forced VIP filter
   const vipCandidates = useMemo(() => {
-    // If you have a "vip" flag on Client, we prefer it. Otherwise fallback to all clients.
-    const vip = clients.filter(c => Boolean((c as any).vip));
-    return vip.length > 0 ? vip : clients;
+    return clients || [];
   }, [clients]);
 
   const selectedVip = useMemo(() => {
@@ -350,7 +349,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
 
     onUpdateInbox([newItem, ...inbox]);
 
-    // Update/Create contact
+    // Update/Create contact in app contacts
     if (onUpdateClients) {
       const emailLower = (inboxForm.email || '').toLowerCase();
       const nameLower = (inboxForm.contactName || '').toLowerCase();
@@ -1001,7 +1000,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
               </div>
             </div>
 
-            {/* Detail (unchanged UI, but keeps phone normalized on create) */}
+            {/* Detail */}
             <div className={`flex-1 rounded-[32px] border overflow-hidden flex flex-col ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
               {selectedLead ? (
                 <div className="flex flex-col h-full">
@@ -1158,22 +1157,22 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
               <h3 className="text-lg font-black uppercase tracking-tight">Saisie Rapide</h3>
 
               <div className="space-y-3">
-                {/* VIP picker */}
+                {/* Contact picker (application contacts) */}
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (VIP)</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
                   <select
                     value={selectedInboxVipId}
                     onChange={(e) => {
                       const id = e.target.value;
                       setSelectedInboxVipId(id);
-                      const vip = clients.find(c => String(c.id) === String(id));
-                      if (vip) {
+                      const c = clients.find(x => String(x.id) === String(id));
+                      if (c) {
                         setInboxForm(prev => ({
                           ...prev,
-                          contactName: prev.contactName || vip.name,
-                          companyName: prev.companyName || (vip.companyName || ''),
-                          email: prev.email || (vip.email || ''),
-                          phone: prev.phone || (vip.phone || ''),
+                          contactName: prev.contactName || c.name,
+                          companyName: prev.companyName || (c.companyName || ''),
+                          email: prev.email || (c.email || ''),
+                          phone: prev.phone || (c.phone || ''),
                         }));
                       }
                     }}
@@ -1323,10 +1322,8 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
               </div>
             </div>
 
-            {/* Right list (unchanged) */}
+            {/* Right list */}
             <div className="flex-1 flex flex-col h-full overflow-hidden">
-              {/* ... (la liste inbox reste identique à ton code actuel) ... */}
-              {/* IMPORTANT: je n'ai pas supprimé ton code, juste raccourci ici pour lisibilité */}
               <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pb-10">
                 {processedInbox.map(item => {
                   const isAlert = checkIsOverdue(item);
@@ -1498,7 +1495,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
           </div>
         )}
 
-        {/* CONTACTS (unchanged) */}
+        {/* CONTACTS */}
         {activeTab === 'contacts' && (
           <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6 w-full">
             <div className={`w-full md:w-1/3 flex flex-col rounded-[32px] border overflow-hidden ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
@@ -1611,21 +1608,21 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
               <h3 className="text-xl font-black uppercase tracking-tight">Nouvelle Demande Qualifiée</h3>
 
               <div className="space-y-4">
-                {/* VIP picker + SMS/WhatsApp */}
+                {/* Contact picker (application contacts) + SMS/WhatsApp */}
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (VIP)</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
                   <select
                     value={selectedVipId}
                     onChange={(e) => {
                       const id = e.target.value;
                       setSelectedVipId(id);
-                      const vip = clients.find(c => String(c.id) === String(id));
-                      if (vip) {
+                      const c = clients.find(x => String(x.id) === String(id));
+                      if (c) {
                         setForm(prev => ({
                           ...prev,
-                          contactName: prev.contactName || vip.name,
-                          email: prev.email || (vip.email || ''),
-                          phone: prev.phone || (vip.phone || ''),
+                          contactName: prev.contactName || c.name,
+                          email: prev.email || (c.email || ''),
+                          phone: prev.phone || (c.phone || ''),
                         }));
                       }
                     }}
