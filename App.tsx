@@ -132,12 +132,12 @@ const AuthenticatedApp: React.FC = () => {
     }
     return INITIAL_EVENTS;
   });
+  // Note: On garde l'état initial channels, mais il sera écrasé par Firebase
   const [channels, setChannels] = useState<ChatChannel[]>(() => JSON.parse(localStorage.getItem(STORAGE_KEYS.CHANNELS) || JSON.stringify(INITIAL_CHANNELS)));
   
   const [userSettings, setUserSettings] = useState<UserSettings>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     return saved ? JSON.parse(saved) : {
-      // ✅ FIX IS HERE: No longer defaults to 'Directeur'
       userName: user?.displayName || 'Utilisateur',
       themeColor: 'indigo',
       darkMode: false,
@@ -194,6 +194,9 @@ const AuthenticatedApp: React.FC = () => {
         if(cls.length > 0) setClients(cls as Client[]);
     }));
     unsubs.push(subscribeToSharedCollection(DB_COLLECTIONS.SPA, (data) => setSpaRequests(data as SpaRequest[])));
+
+    // ✅ NOUVEAU : On écoute les messages en temps réel
+    unsubs.push(subscribeToSharedCollection('conversations', (data) => setChannels(data as ChatChannel[])));
 
     // 2. ESPACES PRIVÉS
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.TASKS, user.uid, (data) => setTodos(data as Task[])));
@@ -271,18 +274,27 @@ const AuthenticatedApp: React.FC = () => {
     saveDocument(DB_COLLECTIONS.GROUPS, { ...updatedClient, type_doc: 'client' });
   };
   
+  // ✅ CORRECTION MESSAGERIE : Sauvegarde dans Firebase
+  const handleSaveChannel = (channel: ChatChannel) => {
+    saveDocument('conversations', channel);
+  };
+
+  const handleDeleteChannel = (channelId: string) => {
+    deleteDocument('conversations', channelId);
+  };
+
   const handleSendMessage = (channelId: string, message: ChatMessage) => {
-    setChannels(prev => prev.map(ch => {
-      if (ch.id === channelId) {
-        return {
-          ...ch,
-          messages: [...ch.messages, message],
-          lastMessage: message.text || (message.attachments?.length ? 'Pièce jointe' : ''),
-          lastUpdate: message.timestamp
-        };
-      }
-      return ch;
-    }).sort((a, b) => new Date(b.lastUpdate).getTime() - new Date(a.lastUpdate).getTime()));
+    const channel = channels.find(c => c.id === channelId);
+    if (channel) {
+      const updatedChannel = {
+        ...channel,
+        messages: [...channel.messages, message],
+        lastMessage: message.text || (message.attachments?.length ? 'Pièce jointe' : ''),
+        lastUpdate: message.timestamp,
+        unreadCount: (channel.unreadCount || 0) + 1
+      };
+      saveDocument('conversations', updatedChannel);
+    }
   };
 
   const handleSaveTask = (task: Task, options?: { sendSms?: boolean, shareInChat?: boolean }) => {
@@ -495,10 +507,17 @@ const AuthenticatedApp: React.FC = () => {
           {activeTab === 'messaging' && (
             user.permissions.canViewMessaging ? (
               <MessagingView 
-                channels={channels} onUpdateChannels={setChannels}
-                users={getAllUsers()} contacts={contacts} 
-                userSettings={userSettings} currentUser={user}
-                onSendMessage={handleSendMessage} onCreateTask={handleCreateTaskFromMessage}
+                channels={channels} 
+                // ✅ PASSAGE DES NOUVELLES FONCTIONS DE SAUVEGARDE
+                onSaveChannel={handleSaveChannel}
+                onDeleteChannel={handleDeleteChannel}
+                onSendMessage={handleSendMessage}
+                
+                users={getAllUsers()} 
+                contacts={contacts} 
+                userSettings={userSettings} 
+                currentUser={user}
+                onCreateTask={handleCreateTaskFromMessage}
               />
             ) : <div className="flex flex-col items-center justify-center h-full text-slate-400"><Lock size={48} className="mb-4 opacity-20" /><p className="font-bold">Accès Messagerie restreint.</p></div>
           )}
