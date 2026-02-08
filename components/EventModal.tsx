@@ -60,35 +60,38 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
 
   if (!isOpen) return null;
 
-  const handleSave = () => {
-    if (!title || !startDate) return;
+const handleSave = () => {
+  if (!title || !startDate) return;
 
-    // 1. Calculer la date de départ
-    const startObj = new Date(`${startDate}T${startTime}`);
+  // 1. Calculer l'objet Date de départ
+  const startObj = new Date(`${startDate}T${startTime}`);
 
-    // 2. Calculer la date de fin basée sur la durée (crucial pour l'agenda)
-    const endObj = new Date(startObj);
-    if (duration.includes('min')) {
-      endObj.setMinutes(endObj.getMinutes() + parseInt(duration));
-    } else if (duration.includes('h')) {
-      endObj.setHours(endObj.getHours() + parseInt(duration));
-    } else {
-      endObj.setHours(endObj.getHours() + 1);
-    }
+  // 2. Calculer l'objet Date de fin basé sur la durée
+  const endObj = new Date(startObj);
+  if (duration.includes('min')) {
+    endObj.setMinutes(endObj.getMinutes() + parseInt(duration));
+  } else if (duration.includes('h')) {
+    endObj.setHours(endObj.getHours() + parseInt(duration));
+  } else {
+    endObj.setHours(endObj.getHours() + 1);
+  }
 
-    onSave({
-      id: editEvent ? editEvent.id : Date.now(),
-      title,
-      start: startObj, 
-      end: endObj, 
-      time: startTime, 
-      duration, 
-      type, 
-      linkedContactId: contactId, 
-      videoLink: videoLink || undefined
-    });
-    onClose();
+  // 3. Préparer l'objet en évitant les valeurs "undefined"
+  const eventToSave = {
+    id: editEvent ? editEvent.id : Date.now(),
+    title: title,
+    start: startObj,
+    end: endObj,
+    time: startTime,
+    duration: duration,
+    type: type || 'pro',
+    linkedContactId: contactId || "", // ✅ Remplace undefined par une chaîne vide
+    videoLink: videoLink || ""       // ✅ Correction de l'erreur Firebase ici
   };
+
+  onSave(eventToSave);
+  onClose();
+};
 
   const handleDelete = () => {
     if (editEvent && onDelete) {
