@@ -6,16 +6,34 @@ import {
   Archive, Download, ArrowDownUp, Check,
   LayoutList, CalendarDays, ChevronLeft, ChevronRight, Trash2
 } from 'lucide-react';
-import { Lead, UserSettings, UserProfile, LeadStatus, InboxItem, Client, InboxSource } from '../types';
+import {
+  Lead,
+  UserSettings,
+  UserProfile,
+  LeadStatus,
+  InboxItem,
+  Client,
+  InboxSource,
+  Contact
+} from '../types';
 
+/* -------------------- TYPES -------------------- */
 interface SalesCRMViewProps {
   userSettings: UserSettings;
   leads: Lead[];
   onUpdateLeads: (leads: Lead[]) => void;
+
   inbox?: InboxItem[];
   onUpdateInbox?: (items: InboxItem[]) => void;
+
+  // Legacy / compat
   clients?: Client[];
   onUpdateClients?: (clients: Client[]) => void;
+
+  // ✅ Preferred: contacts from ContactsView (application)
+  contacts?: Contact[];
+  onUpdateContacts?: (contacts: Contact[]) => void;
+
   users: UserProfile[];
   onNavigate: (tab: string) => void;
 }
@@ -30,9 +48,13 @@ const safeDate = (date: any) => {
 
 // ✅ Stable unique id (avoids key collisions => DOM NotFoundError)
 const uid = (prefix: string) => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    // @ts-ignore
-    return `${prefix}-${crypto.randomUUID()}`;
+  try {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      // @ts-ignore
+      return `${prefix}-${crypto.randomUUID()}`;
+    }
+  } catch {
+    // no-op
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
@@ -67,21 +89,11 @@ const toE164FR = (raw: string) => {
   const p = normalizePhone(raw);
   if (!p) return '';
 
-  // Already +33...
   if (p.startsWith('+33')) return p;
-
-  // Already 33...
   if (/^33\d{9}$/.test(p)) return `+${p}`;
-
-  // French national 10 digits starting with 0
   if (/^0\d{9}$/.test(p)) return `+33${p.slice(1)}`;
-
-  // If it's another +country, keep it
   if (p.startsWith('+') && p.length >= 8) return p;
-
-  // Fallback: try to add +
   if (/^\d{8,15}$/.test(p)) return `+${p}`;
-
   return '';
 };
 
@@ -102,7 +114,7 @@ const buildMessage = (data: {
   note?: string;
   rooms?: Rooms;
   sourceLabel?: string;
-  vip?: Client | null;
+  vip?: any | null;
 }) => {
   const rooms = data.rooms || defaultRooms();
 
@@ -112,12 +124,11 @@ const buildMessage = (data: {
       : '📅 Dates: à définir';
 
   const pax = typeof data.pax === 'number' ? `👥 PAX: ${data.pax}` : '';
-
   const roomsLine = `🛏️ Chambres: Single ${rooms.single} | Twin ${rooms.twin} | Double ${rooms.double} | Fam ${rooms.family}`;
 
   const c = data.vip;
   const name = c?.name || data.contactName || '-';
-  const company = c?.companyName ? ` (${c.companyName})` : '';
+  const company = (c?.companyName || c?.company) ? ` (${c.companyName || c.company})` : '';
   const phone = toE164FR(c?.phone || data.phone || '');
   const email = c?.email || data.email || '';
 
@@ -143,14 +154,13 @@ const buildMessage = (data: {
 const openSMS = (rawPhone: string, message: string) => {
   const e164 = toE164FR(rawPhone);
   if (!e164) return;
-  // sms: expects phone, most devices accept +33...
   window.location.href = `sms:${encodeURIComponent(e164)}?body=${encodeURIComponent(message)}`;
 };
 
 const openWhatsApp = (rawPhone: string, message: string) => {
   const wa = toWhatsAppNumber(rawPhone);
   if (!wa) return;
-  window.open(`https://wa.me/${encodeURIComponent(wa)}?text=${encodeURIComponent(message)}`, '_blank');
+  window.open(`https://wa.me/${encodeURIComponent(wa)}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
 };
 
 const RoomsInputs: React.FC<{
@@ -198,20 +208,65 @@ const RoomsInputs: React.FC<{
 };
 
 /* -------------------- COMPONENT -------------------- */
-const SalesCRMView: React.FC<SalesCRMViewProps> = ({
-  userSettings,
-  leads,
-  onUpdateLeads,
-  inbox = [],
-  onUpdateInbox,
-  clients = [],
-  onUpdateClients,
-  users,
-  onNavigate
-}) => {
+const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
+  const {
+    userSettings,
+    leads,
+    onUpdateLeads,
+    inbox = [],
+    onUpdateInbox,
+    clients = [],
+    onUpdateClients,
+    contacts,
+    onUpdateContacts,
+    users,
+    onNavigate
+  } = props;
+
+  /* -------------------- CONTACTS (APPLICATION FIRST) -------------------- */
+  // ✅ Use ContactsView data if provided, else fallback to legacy clients for compat.
+  const appContacts: any[] = useMemo(() => {
+    if (Array.isArray(contacts)) return contacts as any[];
+    return Array.isArray(clients) ? (clients as any[]) : [];
+  }, [contacts, clients]);
+
+  const updateAppContacts = (next: any[]) => {
+    // Prefer application contacts updater
+    if (typeof onUpdateContacts === 'function') {
+      onUpdateContacts(next as any);
+      return;
+    }
+    // Fallback legacy
+    if (typeof onUpdateClients === 'function') {
+      onUpdateClients(next as any);
+    }
+  };
+
+  // Normalization getters (Contact vs Client)
+  const getContactId = (c: any) => String(c?.id ?? '');
+  const getContactName = (c: any) => String(c?.name ?? '');
+  const getContactCompany = (c: any) => String(c?.companyName ?? c?.company ?? '');
+  const getContactRole = (c: any) => String(c?.role ?? '');
+  const getContactEmail = (c: any) => String(c?.email ?? '');
+  const getContactPhone = (c: any) => String(c?.phone ?? '');
+  const isVip = (c: any) => Boolean(c?.vip);
+
+  // ✅ Candidates for pickers: VIP first, then alpha
+  const vipCandidates = useMemo(() => {
+    const arr = [...(appContacts || [])];
+    arr.sort((a, b) => {
+      const va = isVip(a) ? 1 : 0;
+      const vb = isVip(b) ? 1 : 0;
+      if (vb !== va) return vb - va;
+      return getContactName(a).localeCompare(getContactName(b), 'fr', { sensitivity: 'base' });
+    });
+    return arr;
+  }, [appContacts]);
+
+  /* -------------------- UI STATE -------------------- */
   const [activeTab, setActiveTab] = useState<'pipeline' | 'inbox' | 'contacts' | 'new_lead' | 'archives'>('pipeline');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [selectedContact, setSelectedContact] = useState<Client | null>(null);
+  const [selectedContactId, setSelectedContactId] = useState<string>(''); // unified
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // PIPELINE
@@ -223,29 +278,31 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
   // ✅ calendar date (do NOT mutate Date instance)
   const [calendarDate, setCalendarDate] = useState(() => new Date());
 
-  // INBOX
+  // INBOX (✅ full tri system)
   const [inboxSearch, setInboxSearch] = useState('');
-  const [inboxSort, setInboxSort] = useState<'date_desc' | 'date_asc' | 'urgency' | 'event_date' | 'alpha'>('date_desc');
+  const [inboxSort, setInboxSort] = useState<
+    'date_desc' | 'date_asc' | 'urgency' | 'event_date' | 'alpha' | 'source' | 'company' | 'quote'
+  >('date_desc');
   const [inboxFilter, setInboxFilter] = useState<'ALL' | 'URGENT' | 'EMAIL' | 'PHONE' | 'WEB' | 'THIS_MONTH'>('ALL');
 
   // Contact select states (kept naming to avoid breaking anything)
   const [selectedVipId, setSelectedVipId] = useState<string>('');
   const [selectedInboxVipId, setSelectedInboxVipId] = useState<string>('');
 
-  // ✅ IMPORTANT FIX: Use CONTACTS FROM APPLICATION (clients) — no group contacts, no forced VIP filter
-  const vipCandidates = useMemo(() => {
-    return clients || [];
-  }, [clients]);
-
   const selectedVip = useMemo(() => {
     if (!selectedVipId) return null;
-    return clients.find(c => String(c.id) === String(selectedVipId)) || null;
-  }, [selectedVipId, clients]);
+    return (appContacts || []).find(c => getContactId(c) === String(selectedVipId)) || null;
+  }, [selectedVipId, appContacts]);
 
   const selectedInboxVip = useMemo(() => {
     if (!selectedInboxVipId) return null;
-    return clients.find(c => String(c.id) === String(selectedInboxVipId)) || null;
-  }, [selectedInboxVipId, clients]);
+    return (appContacts || []).find(c => getContactId(c) === String(selectedInboxVipId)) || null;
+  }, [selectedInboxVipId, appContacts]);
+
+  const selectedContact = useMemo(() => {
+    if (!selectedContactId) return null;
+    return (appContacts || []).find(c => getContactId(c) === String(selectedContactId)) || null;
+  }, [selectedContactId, appContacts]);
 
   // NEW LEAD FORM (+ rooms)
   const [form, setForm] = useState<(Partial<Lead> & { rooms: Rooms })>({
@@ -286,33 +343,33 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
   // CONTACTS
   const [contactSearch, setContactSearch] = useState('');
 
-  /* -------------------- CONTACT ACTIONS -------------------- */
+  /* -------------------- CONTACT ACTIONS (SAFE) -------------------- */
   const handleDeleteClient = (id: string) => {
     const targetId = String(id);
-    if (!confirm('Supprimer ce contact définitivement ?')) return;
+    if (!window.confirm('Supprimer ce contact définitivement ?')) return;
 
-    if (onUpdateClients) {
-      onUpdateClients(clients.filter(c => String(c.id) !== targetId));
-    }
-    if (selectedContact && String(selectedContact.id) === targetId) {
-      setSelectedContact(null);
-    }
+    const next = (appContacts || []).filter(c => getContactId(c) !== targetId);
+    updateAppContacts(next);
+
+    if (selectedContactId === targetId) setSelectedContactId('');
   };
 
   const filteredContacts = useMemo(() => {
-    if (!clients) return [];
-    if (!contactSearch) return clients;
+    const list = appContacts || [];
+    if (!contactSearch) return list;
     const lower = safeLower(contactSearch);
-    return clients.filter(c =>
-      safeLower(c.name).includes(lower) ||
-      safeLower(c.companyName).includes(lower)
+    return list.filter(c =>
+      safeLower(getContactName(c)).includes(lower) ||
+      safeLower(getContactCompany(c)).includes(lower) ||
+      safeLower(getContactRole(c)).includes(lower) ||
+      safeLower(getContactEmail(c)).includes(lower)
     );
-  }, [clients, contactSearch]);
+  }, [appContacts, contactSearch]);
 
   const handleExportContacts = () => {
-    const headers = 'Nom,Type,Entreprise,Email,Téléphone,Date Ajout\n';
+    const headers = 'Nom,Entreprise,Rôle,Email,Téléphone,VIP\n';
     const rows = filteredContacts.map(c =>
-      `"${c.name}","${c.type}","${c.companyName || ''}","${c.email}","${c.phone}","${new Date(c.createdAt).toLocaleDateString()}"`
+      `"${getContactName(c)}","${getContactCompany(c)}","${getContactRole(c)}","${getContactEmail(c)}","${getContactPhone(c)}","${isVip(c) ? 'Oui' : 'Non'}"`
     ).join('\n');
 
     const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(headers + rows);
@@ -335,7 +392,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
       contactName: inboxForm.contactName,
       companyName: inboxForm.companyName,
       email: inboxForm.email,
-      phone: toE164FR(inboxForm.phone) || inboxForm.phone, // keep best effort
+      phone: toE164FR(inboxForm.phone) || inboxForm.phone,
       requestDate: new Date().toISOString(),
       source: inboxForm.source,
       status: 'to_process',
@@ -349,33 +406,42 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
 
     onUpdateInbox([newItem, ...inbox]);
 
-    // Update/Create contact in app contacts
-    if (onUpdateClients) {
-      const emailLower = (inboxForm.email || '').toLowerCase();
-      const nameLower = (inboxForm.contactName || '').toLowerCase();
+    // ✅ Update/Create contact in APPLICATION contacts (safe + best effort)
+    const canUpdate = typeof onUpdateContacts === 'function' || typeof onUpdateClients === 'function';
+    if (canUpdate) {
+      const emailLower = safeLower(inboxForm.email);
+      const nameLower = safeLower(inboxForm.contactName);
 
-      const existingClient = clients.find(c =>
-        (!!emailLower && (c.email || '').toLowerCase() === emailLower) ||
-        (!!nameLower && (c.name || '').toLowerCase() === nameLower)
+      const existing = (appContacts || []).find(c =>
+        (!!emailLower && safeLower(getContactEmail(c)) === emailLower) ||
+        (!!nameLower && safeLower(getContactName(c)) === nameLower)
       );
 
-      if (existingClient) {
-        const nextPhone = toE164FR(inboxForm.phone) || inboxForm.phone;
-        if (!existingClient.phone && nextPhone) {
-          onUpdateClients(clients.map(c => c.id === existingClient.id ? { ...c, phone: nextPhone } : c));
-        }
-      } else {
-        const newClient: Client = {
-          id: uid('cl'),
-          name: inboxForm.contactName,
-          companyName: inboxForm.companyName,
-          type: inboxForm.companyName ? 'Entreprise' : 'Particulier',
-          email: inboxForm.email,
-          phone: toE164FR(inboxForm.phone) || inboxForm.phone,
-          address: '',
-          createdAt: new Date().toISOString()
+      const nextPhone = toE164FR(inboxForm.phone) || inboxForm.phone;
+
+      if (existing) {
+        // Only enrich missing fields (do not overwrite user-entered data)
+        const updated = {
+          ...existing,
+          email: getContactEmail(existing) || inboxForm.email,
+          phone: getContactPhone(existing) || nextPhone,
         };
-        onUpdateClients([newClient, ...clients]);
+        const next = (appContacts || []).map(c => getContactId(c) === getContactId(existing) ? updated : c);
+        updateAppContacts(next);
+      } else {
+        // Create minimal safe contact compatible with both models
+        const newContact: any = {
+          id: uid('ct'),
+          name: inboxForm.contactName,
+          company: inboxForm.companyName || '',
+          companyName: inboxForm.companyName || '',
+          role: '',
+          email: inboxForm.email || '',
+          phone: nextPhone || '',
+          vip: false,
+          status: 'In House',
+        };
+        updateAppContacts([newContact, ...(appContacts || [])]);
       }
     }
 
@@ -405,7 +471,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
       endDate: item.eventEndDate || '',
       note: `${item.note ? item.note + '\n\n' : ''}Source: ${String(item.source).toUpperCase()}. Demande du ${new Date(item.requestDate).toLocaleDateString()}`,
       rooms: rooms || defaultRooms(),
-      pax: (form.pax ?? 0) as any, // keep current pax if any
+      pax: (form.pax ?? 0) as any,
     } as any);
 
     if (onUpdateInbox) {
@@ -421,7 +487,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
     onUpdateInbox(inbox.map(i => i.id === id ? { ...i, type_doc: 'inbox' as const, status: 'archived' as const } : i));
 
     setToastMessage('Demande archivée avec succès');
-    setTimeout(() => setToastMessage(null), 3000);
+    window.setTimeout(() => setToastMessage(null), 3000);
   };
 
   const handleUpdateLastFollowUp = (id: string, dateISO: string) => {
@@ -442,18 +508,22 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
     return (now.getTime() - ref.getTime()) > 48 * 3600 * 1000;
   };
 
+  // ✅ FULL SORTING + FILTERING (SAFE)
   const processedInbox = useMemo(() => {
     let items = [...(inbox || [])].filter(i => i.status === 'to_process');
 
+    // Search
     if (inboxSearch) {
       const lower = safeLower(inboxSearch);
       items = items.filter(i =>
         safeLower(i.contactName).includes(lower) ||
         safeLower(i.companyName).includes(lower) ||
-        safeLower(i.email).includes(lower)
+        safeLower(i.email).includes(lower) ||
+        safeLower(i.phone).includes(lower)
       );
     }
 
+    // Filters
     if (inboxFilter !== 'ALL') {
       try {
         if (inboxFilter === 'URGENT') {
@@ -466,19 +536,41 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
             return !Number.isNaN(d.getTime()) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
           });
         } else {
-          items = items.filter(i => safeLower(i.source) === safeLower(inboxFilter));
+          // EMAIL / PHONE / WEB
+          items = items.filter(i => {
+            const src = safeLower(i.source);
+            if (inboxFilter === 'EMAIL') return src === 'email';
+            if (inboxFilter === 'PHONE') return src === 'phone';
+            if (inboxFilter === 'WEB') return src === 'website';
+            return true;
+          });
         }
       } catch {
         // no-op
       }
     }
 
+    // Sorting
     items.sort((a, b) => {
       try {
         switch (inboxSort) {
           case 'date_asc': return safeDate(a.requestDate) - safeDate(b.requestDate);
           case 'date_desc': return safeDate(b.requestDate) - safeDate(a.requestDate);
-          case 'alpha': return safeLower(a.contactName).localeCompare(safeLower(b.contactName));
+
+          case 'alpha': return safeLower(a.contactName).localeCompare(safeLower(b.contactName), 'fr', { sensitivity: 'base' });
+
+          case 'company': return safeLower(a.companyName).localeCompare(safeLower(b.companyName), 'fr', { sensitivity: 'base' });
+
+          case 'source': return safeLower(String(a.source)).localeCompare(safeLower(String(b.source)), 'fr', { sensitivity: 'base' });
+
+          case 'quote': {
+            // quoteSent false first (needs action), then by date desc
+            const qa = a.quoteSent ? 1 : 0;
+            const qb = b.quoteSent ? 1 : 0;
+            if (qa !== qb) return qa - qb;
+            return safeDate(b.requestDate) - safeDate(a.requestDate);
+          }
+
           case 'event_date': {
             const da = safeDate(a.eventStartDate);
             const db = safeDate(b.eventStartDate);
@@ -486,11 +578,15 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
             if (!db) return -1;
             return da - db;
           }
+
           case 'urgency': {
             const ua = checkIsOverdue(a) ? 1 : 0;
             const ub = checkIsOverdue(b) ? 1 : 0;
-            return ub - ua;
+            if (ub !== ua) return ub - ua;
+            // tie-break: oldest first
+            return safeDate(a.requestDate) - safeDate(b.requestDate);
           }
+
           default: return 0;
         }
       } catch {
@@ -545,7 +641,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
   };
 
   const handleDeleteLead = (id: string) => {
-    if (!confirm('Supprimer ce lead ?')) return;
+    if (!window.confirm('Supprimer ce lead ?')) return;
     onUpdateLeads(leads.filter(l => l.id !== id));
     setSelectedLead(null);
   };
@@ -643,7 +739,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
           case 'created_desc':
             return safeDate(b.requestDate) - safeDate(a.requestDate);
           case 'alpha':
-            return safeLower(a.groupName).localeCompare(safeLower(b.groupName));
+            return safeLower(a.groupName).localeCompare(safeLower(b.groupName), 'fr', { sensitivity: 'base' });
           case 'urgency':
             return checkAlerts(b).length - checkAlerts(a).length;
           default:
@@ -665,15 +761,10 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
     const lastDay = new Date(year, month + 1, 0);
 
     const days: (Date | null)[] = [];
-
     let startDay = firstDay.getDay(); // 0=Sun
     startDay = startDay === 0 ? 6 : startDay - 1; // Mon=0
     for (let i = 0; i < startDay; i++) days.push(null);
-
-    for (let i = 1; i <= lastDay.getDate(); i++) {
-      days.push(new Date(year, month, i));
-    }
-
+    for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
     return days;
   }, [calendarDate]);
 
@@ -732,8 +823,10 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
 
   const clientHistory = useMemo(() => {
     if (!selectedContact) return [];
+    const email = getContactEmail(selectedContact);
+    const name = getContactName(selectedContact);
     return (leads || [])
-      .filter(l => l.email === selectedContact.email || l.contactName === selectedContact.name)
+      .filter(l => (email && l.email === email) || l.contactName === name)
       .sort((a, b) => safeDate(b.requestDate) - safeDate(a.requestDate));
   }, [selectedContact, leads]);
 
@@ -1007,7 +1100,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                   <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-start">
                     <div>
                       <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                        Dossier #{selectedLead.id.split('-')[1] || selectedLead.id}
+                        Dossier #{String(selectedLead.id).split('-')[1] || selectedLead.id}
                       </span>
                       <h2 className="text-3xl font-black mt-1">{selectedLead.groupName}</h2>
 
@@ -1165,14 +1258,14 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                     onChange={(e) => {
                       const id = e.target.value;
                       setSelectedInboxVipId(id);
-                      const c = clients.find(x => String(x.id) === String(id));
+                      const c = (appContacts || []).find(x => getContactId(x) === String(id));
                       if (c) {
                         setInboxForm(prev => ({
                           ...prev,
-                          contactName: prev.contactName || c.name,
-                          companyName: prev.companyName || (c.companyName || ''),
-                          email: prev.email || (c.email || ''),
-                          phone: prev.phone || (c.phone || ''),
+                          contactName: prev.contactName || getContactName(c),
+                          companyName: prev.companyName || getContactCompany(c),
+                          email: prev.email || getContactEmail(c),
+                          phone: prev.phone || getContactPhone(c),
                         }));
                       }
                     }}
@@ -1180,8 +1273,8 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                   >
                     <option value="">— Sélectionner —</option>
                     {vipCandidates.map(c => (
-                      <option key={String(c.id)} value={String(c.id)}>
-                        {c.name}{c.companyName ? ` • ${c.companyName}` : ''}{c.phone ? ` • ${c.phone}` : ''}
+                      <option key={getContactId(c)} value={getContactId(c)}>
+                        {getContactName(c)}{getContactCompany(c) ? ` • ${getContactCompany(c)}` : ''}{getContactPhone(c) ? ` • ${getContactPhone(c)}` : ''}
                       </option>
                     ))}
                   </select>
@@ -1190,7 +1283,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        const phone = selectedInboxVip?.phone || inboxForm.phone;
+                        const phone = getContactPhone(selectedInboxVip) || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
                           contactName: inboxForm.contactName,
@@ -1212,7 +1305,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        const phone = selectedInboxVip?.phone || inboxForm.phone;
+                        const phone = getContactPhone(selectedInboxVip) || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
                           contactName: inboxForm.contactName,
@@ -1324,6 +1417,51 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
 
             {/* Right list */}
             <div className="flex-1 flex flex-col h-full overflow-hidden">
+              {/* ✅ INBOX TOOLBAR: search + filter + sort */}
+              <div className={`rounded-[24px] border p-4 mb-4 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
+                <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                  <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border border-transparent focus-within:border-indigo-500 transition-colors">
+                    <Search size={16} className="text-slate-400 mr-2" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher (nom, entreprise, email, téléphone)..."
+                      value={inboxSearch}
+                      onChange={(e) => setInboxSearch(e.target.value)}
+                      className="bg-transparent outline-none w-full text-xs font-bold"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border border-transparent">
+                      <ArrowDownUp size={14} className="text-slate-400 mr-2" />
+                      <select
+                        value={inboxSort}
+                        onChange={(e) => setInboxSort(e.target.value as any)}
+                        className="bg-transparent outline-none text-xs font-bold appearance-none cursor-pointer"
+                      >
+                        <option value="date_desc">🆕 Récent → Ancien</option>
+                        <option value="date_asc">📆 Ancien → Récent</option>
+                        <option value="urgency">🚨 Urgence (+48h)</option>
+                        <option value="event_date">📅 Date événement</option>
+                        <option value="alpha">Abc Nom</option>
+                        <option value="company">🏢 Entreprise</option>
+                        <option value="source">🌐 Source</option>
+                        <option value="quote">🧾 Devis (à envoyer)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto no-scrollbar mt-3 pb-1">
+                  <button onClick={() => setInboxFilter('ALL')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'ALL' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>Tous</button>
+                  <button onClick={() => setInboxFilter('URGENT')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'URGENT' ? 'bg-orange-500 text-white border-orange-500' : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:text-orange-500'}`}>🚨 Urgent</button>
+                  <button onClick={() => setInboxFilter('THIS_MONTH')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'THIS_MONTH' ? 'bg-violet-500 text-white border-violet-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>📅 Ce mois</button>
+                  <button onClick={() => setInboxFilter('EMAIL')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'EMAIL' ? 'bg-blue-500 text-white border-blue-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>Email</button>
+                  <button onClick={() => setInboxFilter('PHONE')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'PHONE' ? 'bg-emerald-500 text-white border-emerald-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>Tél</button>
+                  <button onClick={() => setInboxFilter('WEB')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'WEB' ? 'bg-purple-500 text-white border-purple-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>Web</button>
+                </div>
+              </div>
+
               <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pb-10">
                 {processedInbox.map(item => {
                   const isAlert = checkIsOverdue(item);
@@ -1519,23 +1657,30 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
               </div>
 
               <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
-                {filteredContacts.map(client => (
+                {filteredContacts.map(c => (
                   <div
-                    key={String(client.id)}
-                    onClick={() => setSelectedContact(client)}
+                    key={getContactId(c)}
+                    onClick={() => setSelectedContactId(getContactId(c))}
                     className={`p-4 rounded-xl cursor-pointer transition-all border ${
-                      selectedContact?.id === client.id ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200' : 'bg-transparent border-transparent hover:bg-slate-50 dark:hover:bg-slate-900'
+                      selectedContactId === getContactId(c) ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200' : 'bg-transparent border-transparent hover:bg-slate-50 dark:hover:bg-slate-900'
                     }`}
                   >
                     <div className="flex justify-between items-start">
-                      <span className="font-bold text-sm">{client.name}</span>
-                      <span className="text-[9px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500 uppercase">
-                        {client.type === 'Entreprise' ? 'PRO' : 'PERSO'}
-                      </span>
+                      <span className="font-bold text-sm truncate pr-2">{getContactName(c)}</span>
+                      {isVip(c) ? (
+                        <span className="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded uppercase font-black">VIP</span>
+                      ) : (
+                        <span className="text-[9px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500 uppercase">Contact</span>
+                      )}
                     </div>
-                    <p className="text-xs text-slate-500 truncate">{client.email}</p>
+                    <p className="text-xs text-slate-500 truncate">{getContactEmail(c) || '-'}</p>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wide truncate mt-1">{getContactCompany(c) || '-'}</p>
                   </div>
                 ))}
+
+                {filteredContacts.length === 0 && (
+                  <div className="text-center py-12 text-slate-400 text-xs font-medium">Aucun contact trouvé.</div>
+                )}
               </div>
             </div>
 
@@ -1544,17 +1689,18 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                 <div className="flex-1 flex flex-col h-full">
                   <div className="flex justify-between items-start mb-8">
                     <div>
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Fiche Client</span>
-                      <h2 className="text-3xl font-black mt-1">{selectedContact.name}</h2>
-                      {selectedContact.companyName && <p className="text-sm font-bold text-slate-500">{selectedContact.companyName}</p>}
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Fiche Contact</span>
+                      <h2 className="text-3xl font-black mt-1">{getContactName(selectedContact)}</h2>
+                      {getContactCompany(selectedContact) && <p className="text-sm font-bold text-slate-500">{getContactCompany(selectedContact)}</p>}
+                      {getContactRole(selectedContact) && <p className="text-xs font-bold text-slate-400 mt-1">{getContactRole(selectedContact)}</p>}
                     </div>
                     <div className="flex flex-col items-end gap-4">
                       <div className="text-right space-y-1">
-                        <p className="text-sm font-bold">{selectedContact.email}</p>
-                        <p className="text-sm font-bold">{selectedContact.phone}</p>
+                        <p className="text-sm font-bold">{getContactEmail(selectedContact) || '-'}</p>
+                        <p className="text-sm font-bold">{getContactPhone(selectedContact) || '-'}</p>
                       </div>
                       <button
-                        onClick={() => handleDeleteClient(String(selectedContact.id))}
+                        onClick={() => handleDeleteClient(getContactId(selectedContact))}
                         className="flex items-center gap-2 text-xs font-bold text-red-400 hover:text-red-600 transition-colors bg-red-50 dark:bg-red-900/10 px-3 py-1.5 rounded-lg uppercase"
                       >
                         <Trash2 size={14} /> Supprimer
@@ -1616,13 +1762,13 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                     onChange={(e) => {
                       const id = e.target.value;
                       setSelectedVipId(id);
-                      const c = clients.find(x => String(x.id) === String(id));
+                      const c = (appContacts || []).find(x => getContactId(x) === String(id));
                       if (c) {
                         setForm(prev => ({
                           ...prev,
-                          contactName: prev.contactName || c.name,
-                          email: prev.email || (c.email || ''),
-                          phone: prev.phone || (c.phone || ''),
+                          contactName: prev.contactName || getContactName(c),
+                          email: prev.email || getContactEmail(c),
+                          phone: prev.phone || getContactPhone(c),
                         }));
                       }
                     }}
@@ -1630,8 +1776,8 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                   >
                     <option value="">— Sélectionner —</option>
                     {vipCandidates.map(c => (
-                      <option key={String(c.id)} value={String(c.id)}>
-                        {c.name}{c.companyName ? ` • ${c.companyName}` : ''}{c.phone ? ` • ${c.phone}` : ''}
+                      <option key={getContactId(c)} value={getContactId(c)}>
+                        {getContactName(c)}{getContactCompany(c) ? ` • ${getContactCompany(c)}` : ''}{getContactPhone(c) ? ` • ${getContactPhone(c)}` : ''}
                       </option>
                     ))}
                   </select>
@@ -1640,7 +1786,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        const phone = selectedVip?.phone || form.phone || '';
+                        const phone = getContactPhone(selectedVip) || form.phone || '';
                         const msg = buildMessage({
                           groupName: form.groupName,
                           contactName: form.contactName,
@@ -1664,7 +1810,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        const phone = selectedVip?.phone || form.phone || '';
+                        const phone = getContactPhone(selectedVip) || form.phone || '';
                         const msg = buildMessage({
                           groupName: form.groupName,
                           contactName: form.contactName,
