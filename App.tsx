@@ -323,10 +323,12 @@ const AuthenticatedApp: React.FC = () => {
       }
     }
 
-    // ✅ 3. LOGIQUE SMS RÉELLE (Ouverture de l'appli SMS)
+    // 3. Logique SMS RÉELLE (Correction ID)
     if (options?.sendSms && task.linkedContactId) {
-       const contact = contacts.find(c => c.id === task.linkedContactId);
-       if (contact?.phone) {
+       // 🚨 CORRECTION ICI : On convertit tout en String pour être sûr de trouver le contact
+       const contact = contacts.find(c => String(c.id) === String(task.linkedContactId));
+       
+       if (contact && contact.phone) {
          // Crée le message
          const body = `HotelOS: Tâche pour ${contact.name}.\n${task.text}\nPour le: ${task.dueDate || 'ASAP'}`;
          
@@ -334,9 +336,10 @@ const AuthenticatedApp: React.FC = () => {
          const encodedBody = encodeURIComponent(body);
          
          // Ouvre l'application SMS native
-         window.location.href = `sms:${contact.phone}?body=${encodedBody}`;
+         window.location.href = `sms:${contact.phone}?&body=${encodedBody}`;
        } else {
-         alert("Ce contact n'a pas de numéro de téléphone enregistré.");
+         console.log("Contact introuvable ou pas de téléphone", task.linkedContactId, contact);
+         alert("Erreur : Impossible de récupérer le numéro de téléphone de ce contact.");
        }
     }
 
