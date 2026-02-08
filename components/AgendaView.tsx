@@ -32,21 +32,13 @@ const AgendaView: React.FC<AgendaViewProps> = ({ events, todos, userSettings, on
     { id: 'TRAVAUX', label: 'Travaux' },
   ];
 
-  // --- CORRECTION MAJEURE : Gestion robuste des dates (Firebase Timestamp support) ---
+  // --- Gestion robuste des dates ---
   const safeDate = (dateInput: any): Date => {
     if (!dateInput) return new Date();
-    // Si c'est un Timestamp Firebase (avec .toDate())
-    if (typeof dateInput.toDate === 'function') {
-      return dateInput.toDate();
-    }
-    // Si c'est un objet avec seconds (format serialisé Firebase)
-    if (dateInput.seconds) {
-      return new Date(dateInput.seconds * 1000);
-    }
-    // Si c'est une string ou déjà une Date
+    if (typeof dateInput.toDate === 'function') return dateInput.toDate();
+    if (dateInput.seconds) return new Date(dateInput.seconds * 1000);
     return new Date(dateInput);
   };
-  // ---------------------------------------------------------------------------------
 
   const isSameDay = (d1: Date, d2: Date) => 
     d1.getDate() === d2.getDate() && 
@@ -56,8 +48,8 @@ const AgendaView: React.FC<AgendaViewProps> = ({ events, todos, userSettings, on
   const isDateInRange = (d: Date, startStr: any, endStr: any) => {
     if (!startStr || !endStr) return false;
     const checkDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const start = safeDate(startStr); // Utilisation de safeDate
-    const end = safeDate(endStr);     // Utilisation de safeDate
+    const start = safeDate(startStr);
+    const end = safeDate(endStr);
     start.setHours(0,0,0,0);
     end.setHours(0,0,0,0);
     return checkDate >= start && checkDate <= end;
@@ -65,13 +57,13 @@ const AgendaView: React.FC<AgendaViewProps> = ({ events, todos, userSettings, on
 
   // Helper to get items for a specific date and apply active filter
   const getItemsForDate = (date: Date) => {
-    // Utilisation de safeDate pour garantir la comparaison
     let dayEvts = events.filter(e => isSameDay(safeDate(e.start), date));
     
-    // Filter Pipeline Groups: Must have valid dates
+    // Filter Pipeline Groups
     let dayGroups = groups.filter(g => g.startDate && g.endDate && isDateInRange(date, g.startDate, g.endDate));
     
-    let dayTasks = todos.filter(t => t.date && isSameDay(safeDate(t.date), date));
+    // ✅ CORRECTION ICI : Utilisation de 'dueDate' au lieu de 'date'
+    let dayTasks = todos.filter(t => t.dueDate && isSameDay(safeDate(t.dueDate), date));
 
     if (activeFilter !== 'ALL') {
       if (activeFilter === 'RDV') {
@@ -89,22 +81,13 @@ const AgendaView: React.FC<AgendaViewProps> = ({ events, todos, userSettings, on
         // Filter by specific Task Tag (F&B, Maintenance, etc.)
         dayEvts = [];
         dayGroups = [];
-        dayTasks = dayTasks.filter(t => t.tag.toUpperCase() === activeFilter);
+        dayTasks = dayTasks.filter(t => t.tag && t.tag.toUpperCase() === activeFilter);
       }
     }
 
     return { events: dayEvts, groups: dayGroups, tasks: dayTasks };
   };
 
-  // ... Le reste du code d'affichage (Month Logic, Week Logic, render...) reste identique ...
-  // Je ne le répète pas pour ne pas surcharger la réponse, car l'erreur n'est pas dans le JSX.
-  
-  // (Note: Assure-toi d'intégrer safeDate et de l'utiliser dans getItemsForDate comme montré ci-dessus)
-  
-  // Pour la compilation complète, tu gardes tout ton code JSX en dessous de `getItemsForDate`
-  // ...
-  
-  // Month Grid Logic (copié tel quel pour que tu puisses copier-coller si besoin)
   const monthData = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -148,8 +131,6 @@ const AgendaView: React.FC<AgendaViewProps> = ({ events, todos, userSettings, on
     }
     setCurrentDate(d);
   };
-  
-  // ... (Reste du JSX inchangé)
   
   const themeHex = `text-${userSettings.themeColor}-600`;
   const themeBg = `bg-${userSettings.themeColor}-600`;
