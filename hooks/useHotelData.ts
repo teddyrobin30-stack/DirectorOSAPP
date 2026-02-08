@@ -98,15 +98,21 @@ export const useHotelData = (user: any) => {
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.TASKS, user.uid, (data) => setTodos(data as Task[])));
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.CONTACTS, user.uid, (data) => setContacts(data as Contact[])));
     
-    // ✅ CORRECTION AGENDA : Dates Start ET End
+    // ✅ CORRECTION AGENDA ROBUSTE : Dates Start ET End
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.AGENDA, user.uid, (data) => {
-       const evts = data.map((e: any) => ({ 
-         ...e, 
-         // Conversion du début
-         start: new Date(e.start?.seconds ? e.start.seconds * 1000 : e.start),
-         // ✅ Conversion de la fin (CRUCIAL POUR L'AFFICHAGE)
-         end: new Date(e.end?.seconds ? e.end.seconds * 1000 : e.end || e.start) 
-       }));
+       const evts = data.map((e: any) => {
+         // 1. On extrait la valeur brute de START (Secondes ou String)
+         const rawStart = e.start?.seconds ? e.start.seconds * 1000 : e.start;
+         
+         // 2. On extrait la valeur brute de END (ou on prend rawStart par défaut)
+         const rawEnd = e.end?.seconds ? e.end.seconds * 1000 : (e.end || rawStart);
+
+         return {
+           ...e,
+           start: new Date(rawStart),
+           end: new Date(rawEnd)
+         };
+       });
        setEvents(evts as CalendarEvent[]);
     }));
 
