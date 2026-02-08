@@ -1,4 +1,25 @@
+// =======================
+// DASHBOARD (personnalisation widgets)
+// =======================
+export type DashboardWidgetId =
+  | 'quick_actions'
+  | 'agenda_today'
+  | 'sales_pulse'
+  | 'active_groups'
+  | 'tasks_focus';
 
+export type DashboardWidgetSize = 'sm' | 'md' | 'lg';
+
+export interface DashboardWidgetConfig {
+  id: DashboardWidgetId;
+  enabled: boolean;
+  order: number;
+  size?: DashboardWidgetSize; // ✅ optionnel (safe Firestore / legacy)
+}
+
+// =======================
+// SETTINGS
+// =======================
 export interface UserSettings {
   userName: string;
   themeColor: string;
@@ -7,8 +28,14 @@ export interface UserSettings {
   googleSync?: boolean;
   whatsappSync?: boolean;
   weatherCity?: string;
+
+  dashboardWidgets?: DashboardWidgetConfig[]; // ✅ OK
 }
 
+
+// =======================
+// WEATHER
+// =======================
 export interface WeatherData {
   temp: number;
   city: string;
@@ -16,17 +43,29 @@ export interface WeatherData {
   loading: boolean;
 }
 
+// =======================
+// AGENDA
+// =======================
 export interface CalendarEvent {
   id: string | number;
   title: string;
-  start: Date;
+
+  // ⚠️ Firestore peut renvoyer Date | string | Timestamp
+  start: any;
+
   time: string;
   duration: string;
   type: 'pro' | 'perso' | 'google';
   linkedContactId?: string | number;
   videoLink?: string;
+
+  // optionnel (tu l’utilises déjà dans App.tsx)
+  ownerId?: string;
 }
 
+// =======================
+// ATTACHMENTS
+// =======================
 export interface Attachment {
   id: string;
   name: string;
@@ -34,6 +73,9 @@ export interface Attachment {
   url: string;
 }
 
+// =======================
+// TASKS
+// =======================
 export interface Task {
   id: string | number; // Updated to allow string IDs for DB compatibility
   text: string;
@@ -48,8 +90,14 @@ export interface Task {
   attachments?: Attachment[];
   ownerId?: string;
   status: 'Pas commencé' | 'En cours' | 'Terminé';
+
+  // (tu l’utilises dans App.tsx: task.dueDate)
+  dueDate?: string;
 }
 
+// =======================
+// CONTACTS
+// =======================
 export interface Contact {
   id: number | string;
   name: string;
@@ -64,8 +112,14 @@ export interface Contact {
   color?: string;
   vip?: boolean;
   status?: string;
+
+  // (tu sauvegardes ownerId dans App.tsx)
+  ownerId?: string;
 }
 
+// =======================
+// GROUPS
+// =======================
 export interface GroupRooms {
   single: number;
   twin: number;
@@ -122,22 +176,28 @@ export interface Group {
   invoiceItems?: InvoiceItem[];
   paymentSchedule?: PaymentSchedule[];
   createdAt?: string;
+
+  // utile si tu sécurises des docs
+  ownerId?: string;
 }
 
+// =======================
+// USERS / AUTH
+// =======================
 export type UserRole = 'admin' | 'manager' | 'staff';
 
 export interface UserPermissions {
   // General
   canManageSettings: boolean;
   canViewSharedData: boolean; // Legacy
-  
+
   // Specific View Access (New)
   canViewAgenda: boolean;
   canViewMessaging: boolean;
-  canViewFnb: boolean;     // Inventory + Kitchen
+  canViewFnb: boolean; // Inventory + Kitchen
   canViewHousekeeping: boolean;
   canViewMaintenance: boolean;
-  canViewCRM: boolean;     // Sales + Groups
+  canViewCRM: boolean; // Sales + Groups
   canViewReception: boolean;
   canViewSpa: boolean;
 }
@@ -151,6 +211,9 @@ export interface UserProfile {
   createdAt: number;
 }
 
+// =======================
+// CHAT
+// =======================
 export interface Reaction {
   emoji: string;
   count: number;
@@ -180,6 +243,9 @@ export interface ChatChannel {
   lastMessage?: string;
 }
 
+// =======================
+// VENUES / CATALOG / BUSINESS
+// =======================
 export interface Venue {
   id: string;
   name: string;
@@ -210,6 +276,9 @@ export interface BusinessConfig {
   bic: string;
 }
 
+// =======================
+// CLIENTS
+// =======================
 export interface Client {
   id: string;
   name: string;
@@ -225,7 +294,15 @@ export interface Client {
   createdAt: string;
 }
 
-export type InventoryCategory = 'Cuisine' | 'Petit Déjeuner' | 'Boissons sans alcool' | 'Boissons avec alcool' | string;
+// =======================
+// INVENTORY
+// =======================
+export type InventoryCategory =
+  | 'Cuisine'
+  | 'Petit Déjeuner'
+  | 'Boissons sans alcool'
+  | 'Boissons avec alcool'
+  | string;
 
 export interface InventoryItem {
   id: string;
@@ -246,6 +323,9 @@ export interface MonthlyInventory {
   closedAt?: string;
 }
 
+// =======================
+// RECIPES
+// =======================
 export interface RecipeIngredient {
   id: string;
   inventoryItemId?: string;
@@ -267,6 +347,9 @@ export interface Recipe {
   ingredients: RecipeIngredient[];
 }
 
+// =======================
+// RATIOS
+// =======================
 export interface RatioItem {
   id: string;
   name: string;
@@ -277,6 +360,9 @@ export interface RatioItem {
   inventoryId?: string;
 }
 
+// =======================
+// ROOMS / HOUSEKEEPING
+// =======================
 export type RoomStatusHK = 'not_started' | 'in_progress' | 'ready';
 export type RoomStatusFront = 'stayover' | 'departure' | 'arrival' | 'vacant';
 
@@ -289,7 +375,17 @@ export interface Room {
   statusHK: RoomStatusHK;
 }
 
-export type LaundryType = 'Drap plat' | 'Housse couette' | 'Taie' | 'Serviette bain' | 'Tapis' | 'Peignoir' | 'Autre';
+// =======================
+// LAUNDRY
+// =======================
+export type LaundryType =
+  | 'Drap plat'
+  | 'Housse couette'
+  | 'Taie'
+  | 'Serviette bain'
+  | 'Tapis'
+  | 'Peignoir'
+  | 'Autre';
 
 export interface LaundryIssue {
   id: string;
@@ -300,7 +396,18 @@ export interface LaundryIssue {
   photoUrl?: string;
 }
 
-export type MaintenanceLocation = 'Chambres' | 'Hall' | 'Cuisine' | 'Extérieur' | 'Spa' | 'Technique' | 'Autre';
+// =======================
+// MAINTENANCE
+// =======================
+export type MaintenanceLocation =
+  | 'Chambres'
+  | 'Hall'
+  | 'Cuisine'
+  | 'Extérieur'
+  | 'Spa'
+  | 'Technique'
+  | 'Autre';
+
 export type MaintenanceStatus = 'open' | 'in_progress' | 'resolved';
 
 export interface MaintenanceTicket {
@@ -340,6 +447,9 @@ export interface MaintenanceContract {
   annualCost?: number;
 }
 
+// =======================
+// CRM
+// =======================
 export type LeadStatus = 'nouveau' | 'en_cours' | 'valide' | 'perdu';
 
 export interface LeadChecklist {
@@ -383,6 +493,9 @@ export interface InboxItem {
   lastFollowUp?: string;
 }
 
+// =======================
+// RECEPTION LOGS
+// =======================
 export type LogPriority = 'info' | 'important' | 'urgent';
 export type LogTarget = 'all' | 'management' | 'housekeeping' | 'maintenance';
 export type LogStatus = 'active' | 'archived';
@@ -431,8 +544,17 @@ export interface Conversation {
   id: string;
 }
 
+// =======================
+// SPA
+// =======================
 export type SpaStatus = 'pending' | 'confirmed' | 'refused';
-export type SpaRefusalReason = 'complet_cabine' | 'complet_soin' | 'contre_indication' | 'annulation' | 'autre';
+
+export type SpaRefusalReason =
+  | 'complet_cabine'
+  | 'complet_soin'
+  | 'contre_indication'
+  | 'annulation'
+  | 'autre';
 
 export interface SpaRequest {
   id: string;
