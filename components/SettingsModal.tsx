@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { X, Moon, Sun, RefreshCw, User, MessageCircle, ShieldCheck, CheckCircle2, Loader2, QrCode, Lock, Trash2, AlertTriangle, LogOut, Plus, Shield, Users, Edit3, Save, Settings, MapPin } from 'lucide-react';
-import { UserSettings, UserRole, UserPermissions } from '../types';
+import { X, Moon, Sun, User, ShieldCheck, Loader2, Trash2, AlertTriangle, LogOut, Plus, Shield, Users, Settings } from 'lucide-react';
+import { UserSettings, UserRole } from '../types';
 import { THEME_COLORS } from '../constants';
 import { useAuth, getDefaultPermissions } from '../services/authContext';
 import AdvancedAccessModal from './AdvancedAccessModal';
+import { useUsers } from '../hooks/useUsers'; // <-- 1. IMPORT AJOUTÉ ICI
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -15,9 +16,8 @@ interface SettingsModalProps {
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onSave, onGoogleLogin, clientId }) => {
-  const { user, logout, registerUser, deleteUser, getAllUsers, updateUserPermissions, updateProfile } = useAuth();
+  const { user, logout, registerUser, deleteUser, updateProfile } = useAuth();
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
-  const [showGoogleOAuth, setShowGoogleOAuth] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
@@ -31,23 +31,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
   // Advanced Modal State
   const [showAdvancedAccess, setShowAdvancedAccess] = useState(false);
 
-  const [userList, setUserList] = useState(getAllUsers());
+  // 2. MODIFICATION MAJEURE ICI : On utilise le Hook au lieu du State local
+  // "users: userList" veut dire : récupère 'users' du hook, mais appelle-le 'userList' dans ce fichier
+  const { users: userList } = useUsers(); 
 
   const isAdmin = user?.role === 'admin';
 
   if (!isOpen) return null;
-
-  const handleSync = (type: 'google' | 'whatsapp') => {
-    // ... (Existing Sync Logic)
-    setIsSyncing(type);
-    setTimeout(() => {
-      onSave({ 
-        ...settings, 
-        [type === 'google' ? 'googleSync' : 'whatsappSync']: !settings[type === 'google' ? 'googleSync' : 'whatsappSync'] 
-      });
-      setIsSyncing(null);
-    }, 1500);
-  };
 
   const handleResetData = () => {
     localStorage.clear();
@@ -81,7 +71,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
     try {
       await registerUser(newUserEmail, newUserPwd, newUserRole, newUserName, getDefaultPermissions(newUserRole));
       setNewUserEmail(''); setNewUserPwd(''); setNewUserName(''); setIsCreatingUser(false);
-      setUserList(getAllUsers()); // Refresh list
+      // 3. SUPPRESSION DU RAFRAÎCHISSEMENT MANUEL (C'est automatique maintenant)
     } catch (e: any) {
       alert(e.message);
     }
@@ -91,7 +81,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
     if(window.confirm("Supprimer cet utilisateur ?")) {
       try {
         await deleteUser(uid);
-        setUserList(getAllUsers());
+        // 3. SUPPRESSION DU RAFRAÎCHISSEMENT MANUEL (C'est automatique maintenant)
       } catch (e: any) {
         alert(e.message);
       }
