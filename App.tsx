@@ -344,32 +344,52 @@ const AuthenticatedApp: React.FC = () => {
           <AnimatePresence mode='wait'>
             <Routes location={location} key={location.pathname}>
 
-              <Route path="/" element={
-                <PageTransition>
-                 <MainDashboard
-  userSettings={userSettings}
-  events={events}
-  todos={todos}
-  contacts={contacts}
-  groups={user.permissions.canViewSharedData ? groups : []}
-  leads={leads}
-  inbox={inbox}
-  onNavigate={(path) => navigate(path)}
-  onTaskToggle={(id) =>
-    handleTaskStatusChange(
-      id,
-      todos.find((t) => t.id === id)?.done ? 'En cours' : 'Terminé'
-    )
+              <Route
+  path="/"
+  element={
+    <PageTransition>
+      <MainDashboard
+        userSettings={userSettings}
+        events={events}
+        todos={todos}
+        contacts={contacts}
+        groups={user.permissions.canViewSharedData ? groups : []}
+        leads={leads}
+        inbox={inbox}
+        onNavigate={(path) => navigate(path)}
+        onTaskToggle={(id) =>
+          handleTaskStatusChange(
+            id,
+            todos.find((t) => t.id === id)?.done ? 'En cours' : 'Terminé'
+          )
+        }
+        onTaskClick={(t) => {
+          setEditTask(t);
+          setShowTaskModal(true);
+        }}
+        onEventClick={(e) => {
+          setEditEvent(e);
+          setShowEventModal(true);
+        }}
+        onGroupClick={setSelectedGroupDetail}
+        onOpenEventModal={() => {
+          setEditEvent(null);
+          setShowEventModal(true);
+        }}
+        onOpenTaskModal={() => {
+          setEditTask(null);
+          setShowTaskModal(true);
+        }}
+        onOpenContactModal={() => {
+          setEditContact(null);
+          setShowContactModal(true);
+        }}
+        onSaveDashboardWidgets={(widgets) =>
+          saveSettings({ dashboardWidgets: widgets })
+        }
+      />
+    </PageTransition>
   }
-  onTaskClick={(t) => { setEditTask(t); setShowTaskModal(true); }}
-  onEventClick={(e) => { setEditEvent(e); setShowEventModal(true); }}
-  onGroupClick={setSelectedGroupDetail}
-  onOpenEventModal={() => { setEditEvent(null); setShowEventModal(true); }}
-  onOpenTaskModal={() => { setEditTask(null); setShowTaskModal(true); }}
-  onOpenContactModal={() => { setEditContact(null); setShowContactModal(true); }}
-
-  // ✅ ICI (dans la balise)
-  onSaveDashboardWidgets={(widgets) => saveSettings({ dashboardWidgets: widgets })}
 />
 
 
