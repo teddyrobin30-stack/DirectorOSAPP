@@ -33,7 +33,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
     return isNaN(date.getTime()) ? new Date() : date;
   };
 
-  // --- LOGIQUE RESTAURÉE : Planning de la semaine ---
+  // --- LOGIQUE RESTAURÉE : Planning de la semaine (Prochains 7 jours) ---
   const upcomingGroups = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -47,7 +47,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
     }).sort((a, b) => safeDate(a.startDate).getTime() - safeDate(b.startDate).getTime());
   }, [groups]);
 
-  // --- LOGIQUE RESTAURÉE : Paiements à venir ---
+  // --- LOGIQUE RESTAURÉE : Règlements financiers attendus ---
   const upcomingPayments = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -61,7 +61,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
           if (!p.paid && p.dueDate) {
             const due = safeDate(p.dueDate);
             if (due >= today && due <= nextWeek) {
-              // Calcul financier complet
+              // ✅ Calcul financier complet restauré
               let totalHT = 0;
               let totalVAT = 0;
               g.invoiceItems?.forEach(item => {
@@ -86,13 +86,14 @@ const GroupsView: React.FC<GroupsViewProps> = ({
     return alerts;
   }, [groups]);
 
-  // --- LOGIQUE RESTAURÉE : Alertes de Gestion ---
+  // --- LOGIQUE RESTAURÉE : Alertes de Gestion détaillées ---
   const getGroupAlerts = (group: Group) => {
     const alerts = [];
     const created = safeDate(group.createdAt);
     const now = new Date();
     const daysSinceCreation = Math.floor((now.getTime() - created.getTime()) / (1000 * 3600 * 24));
 
+    // A. Option expirée (> 10 jours)
     if (group.status === 'option' && daysSinceCreation > 10) {
       alerts.push({
         type: 'expired_option',
@@ -101,25 +102,33 @@ const GroupsView: React.FC<GroupsViewProps> = ({
         color: 'red',
         icon: Clock,
         emailSubject: `Relance option - ${group.name}`,
-        emailBody: `Bonjour,\n\nSauf erreur de notre part, l'option pour votre groupe "${group.name}" est arrivée à échéance.\n\nCordialement,`
+        emailBody: `Bonjour,\n\nSauf erreur de notre part, l'option pour votre groupe "${group.name}" est arrivée à échéance.\nPouvons-nous procéder à la confirmation ?\n\nCordialement,`
       });
     }
 
-    if (!group.invoiceItems || group.invoiceItems.length === 0) {
+    // B. Complétude du dossier
+    const hasInvoiceItems = group.invoiceItems && group.invoiceItems.length > 0;
+    const hasPaymentSchedule = group.paymentSchedule && group.paymentSchedule.length > 0;
+    
+    if (!hasInvoiceItems) {
       alerts.push({
         type: 'missing_info',
         label: 'Prestations vides',
         actionLabel: 'Compléter',
         color: 'orange',
         icon: AlertTriangle,
+        emailSubject: `Informations manquantes - ${group.name}`,
+        emailBody: `Bonjour,\n\nNous avons besoin de valider les prestations pour le groupe "${group.name}".\n\nCordialement,`
       });
-    } else if ((!group.paymentSchedule || group.paymentSchedule.length === 0) && group.status === 'confirmed') {
+    } else if (!hasPaymentSchedule && group.status === 'confirmed') {
        alerts.push({
         type: 'missing_payment',
         label: 'Échéancier manquant',
         actionLabel: 'Créer',
         color: 'orange',
         icon: Wallet,
+        emailSubject: `Facturation - ${group.name}`,
+        emailBody: `Bonjour,\n\nNous devons mettre en place l'échéancier pour le groupe "${group.name}".\n\nCordialement,`
       });
     }
     return alerts;
@@ -136,7 +145,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
 
   return (
     <div className="px-6 py-6 space-y-8 animate-in fade-in pb-32">
-      {/* Header */}
+      {/* Header avec Configuration et Calendrier Lieux */}
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h2 className="text-2xl font-black">RM Groupes</h2>
@@ -145,7 +154,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
           </button>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowVenueCalendar(true)} className="px-4 py-2 rounded-xl text-xs font-black uppercase border-2 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 flex items-center gap-2 hover:bg-slate-50 transition-colors">
+          <button onClick={() => setShowVenueCalendar(true)} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wide border-2 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2`}>
             <MapPin size={14} /> Calendrier Lieux
           </button>
           <button onClick={onAdd} className={`p-2 rounded-xl text-white bg-${themeColor}-600 shadow-lg hover:opacity-90 active:scale-95 transition-all`}>
@@ -154,7 +163,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
         </div>
       </div>
 
-      {/* Module de notifications hebdomadaires */}
+      {/* Module de notifications hebdomadaires restauré */}
       {(upcomingGroups.length > 0 || upcomingPayments.length > 0) && (
         <div className="p-5 rounded-[28px] border-2 border-indigo-100 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-900/20">
            <div className="flex items-center gap-2 mb-4">
@@ -200,7 +209,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
         </div>
       )}
 
-      {/* Grille des groupes */}
+      {/* Grille des Groupes restaurée */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {groups.map(group => {
           const alerts = getGroupAlerts(group);
@@ -234,6 +243,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
                 </div>
               </div>
 
+              {/* Inventaire des chambres restauré */}
               <div className={`p-4 rounded-2xl border mb-4 grid grid-cols-4 gap-2 text-center ${userSettings.darkMode ? 'bg-slate-700/30 border-slate-600' : 'bg-slate-50 border-slate-100'}`}>
                 {[{ label: 'SGL', val: group.rooms?.single || 0 }, { label: 'TWN', val: group.rooms?.twin || 0 }, { label: 'DBL', val: group.rooms?.double || 0 }, { label: 'FAM', val: group.rooms?.family || 0 }].map(r => (
                   <div key={r.label}>
@@ -243,6 +253,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
                 ))}
               </div>
 
+              {/* Section Alertes & Actions restaurée */}
               {alerts.length > 0 ? (
                 <div className="space-y-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
                   {alerts.map((alert, i) => (
@@ -251,7 +262,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
                          <alert.icon size={14} />
                          <span className="text-[10px] font-bold uppercase">{alert.label}</span>
                        </div>
-                       <button onClick={(e) => { e.stopPropagation(); alert.type === 'expired_option' ? handleEmailAction(group.rmContactId, alert.emailSubject || "", alert.emailBody || "") : onGroupClick(group); }} className="px-3 py-1 bg-white rounded-lg text-[9px] font-black uppercase shadow-sm">
+                       <button onClick={(e) => { e.stopPropagation(); alert.emailSubject ? handleEmailAction(group.rmContactId, alert.emailSubject, alert.emailBody || "") : onGroupClick(group); }} className="px-3 py-1 bg-white rounded-lg text-[9px] font-black uppercase shadow-sm">
                          {alert.actionLabel}
                        </button>
                     </div>
@@ -260,7 +271,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
               ) : (
                 <div className="flex justify-between items-center mt-2">
                   <div className="flex gap-2">
-                    {/* ✅ Protection anti-crash sur les icônes d'options */}
+                    {/* ✅ Protection anti-crash sur les icônes d'options restaurées */}
                     {group.options?.je && <span title="Journée Étude" className="p-1.5 rounded-lg bg-slate-100 text-slate-500"><Briefcase size={12}/></span>}
                     {group.options?.dinner && <span title="Dîner" className="p-1.5 rounded-lg bg-slate-100 text-slate-500"><Utensils size={12}/></span>}
                   </div>
