@@ -17,28 +17,23 @@ import {
   Recipe, RatioItem, ChatChannel 
 } from '../types';
 
-// ✅ IMPORT DU HOOK COMPLEMENTAIRE (Pour éviter le doublon)
+// ✅ IMPORT DU HOOK COMPLEMENTAIRE
 import { useUsers } from './useUsers';
 
-// Helper pour le LocalStorage pour alléger le code
+// Helper pour le LocalStorage
 function useStickyState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => {
     const stickyValue = localStorage.getItem(key);
     return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
   });
-  
-  // Petit effet de bord pour sauvegarder automatiquement dans LS si le state change (Optionnel mais pratique)
-  // useEffect(() => { localStorage.setItem(key, JSON.stringify(value)); }, [key, value]);
-  
   return [value, setValue];
 }
 
 export const useHotelData = (user: any) => {
-  // ✅ UTILISATION DE useUsers (Composition)
-  // On récupère la liste des utilisateurs gérée par l'autre hook
+  // ✅ UTILISATION DE useUsers
   const { users: allUsers } = useUsers();
 
-  // --- STATES (Initialisés via LocalStorage ou Mock) ---
+  // --- STATES ---
   const [contacts, setContacts] = useStickyState<Contact[]>('hotelos_contacts_v3', INITIAL_CONTACTS);
   const [todos, setTodos] = useStickyState<Task[]>('hotelos_todos_v3', INITIAL_TODOS);
   const [groups, setGroups] = useStickyState<Group[]>('hotelos_groups_v3', INITIAL_GROUPS);
@@ -48,7 +43,7 @@ export const useHotelData = (user: any) => {
   const [inventory, setInventory] = useStickyState<Record<string, MonthlyInventory>>('hotelos_inventory_v1', INITIAL_INVENTORY);
   const [recipes, setRecipes] = useStickyState<Recipe[]>('hotelos_recipes_v1', INITIAL_RECIPES);
   
-  // États simples (sans persistance LS lourde ou gérés par Firebase direct)
+  // États simples
   const [channels, setChannels] = useState<ChatChannel[]>(INITIAL_CHANNELS);
   const [events, setEvents] = useState<CalendarEvent[]>(INITIAL_EVENTS);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -59,11 +54,9 @@ export const useHotelData = (user: any) => {
   const [taxis, setTaxis] = useState<TaxiBooking[]>([]);
   const [lostItems, setLostItems] = useState<LostItem[]>([]);
   const [spaRequests, setSpaRequests] = useState<SpaRequest[]>([]);
-  const [laundryIssues, setLaundryIssues] = useState<any[]>([]); // Typage à affiner
+  const [laundryIssues, setLaundryIssues] = useState<any[]>([]);
   const [ratioItems, setRatioItems] = useState<RatioItem[]>([]);
   const [ratioCategories, setRatioCategories] = useState<string[]>([]);
-  
-  // ❌ SUPPRIMÉ : const [allUsers, setAllUsers] = useState<any[]>([]); (Géré par useUsers désormais)
 
   // --- FIREBASE SUBSCRIPTIONS ---
   useEffect(() => {
@@ -100,18 +93,19 @@ export const useHotelData = (user: any) => {
 
     // 2. MESSAGERIE
     unsubs.push(subscribeToSharedCollection('conversations', (data) => setChannels(data as ChatChannel[])));
-    
-    // ❌ SUPPRIMÉ : unsubs.push(subscribeToSharedCollection('users', (data) => setAllUsers(data))); (Doublon évité)
 
     // 3. ESPACES PRIVÉS
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.TASKS, user.uid, (data) => setTodos(data as Task[])));
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.CONTACTS, user.uid, (data) => setContacts(data as Contact[])));
     
-    // Correction Agenda : Dates
+    // ✅ CORRECTION AGENDA : Dates Start ET End
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.AGENDA, user.uid, (data) => {
        const evts = data.map((e: any) => ({ 
          ...e, 
-         start: new Date(e.start.seconds ? e.start.seconds * 1000 : e.start) 
+         // Conversion du début
+         start: new Date(e.start?.seconds ? e.start.seconds * 1000 : e.start),
+         // ✅ Conversion de la fin (CRUCIAL POUR L'AFFICHAGE)
+         end: new Date(e.end?.seconds ? e.end.seconds * 1000 : e.end || e.start) 
        }));
        setEvents(evts as CalendarEvent[]);
     }));
@@ -119,7 +113,6 @@ export const useHotelData = (user: any) => {
     return () => { unsubs.forEach(unsub => unsub()); };
   }, [user]);
 
-  // On retourne tout ce dont l'UI a besoin
   return {
     contacts, setContacts,
     todos, setTodos,
@@ -142,6 +135,6 @@ export const useHotelData = (user: any) => {
     laundryIssues, setLaundryIssues,
     ratioItems, setRatioItems,
     ratioCategories, setRatioCategories,
-    allUsers // Vient maintenant de useUsers()
+    allUsers
   };
 };
