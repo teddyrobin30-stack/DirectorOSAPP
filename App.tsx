@@ -135,7 +135,7 @@ const AuthenticatedApp: React.FC = () => {
   
   const [channels, setChannels] = useState<ChatChannel[]>(() => JSON.parse(localStorage.getItem(STORAGE_KEYS.CHANNELS) || JSON.stringify(INITIAL_CHANNELS)));
   
-  // ✅ 1. ÉTAT POUR STOCKER TOUS LES UTILISATEURS
+  // ÉTAT POUR STOCKER TOUS LES UTILISATEURS
   const [allUsers, setAllUsers] = useState<any[]>([]);
 
   const [userSettings, setUserSettings] = useState<UserSettings>(() => {
@@ -198,7 +198,7 @@ const AuthenticatedApp: React.FC = () => {
     }));
     unsubs.push(subscribeToSharedCollection(DB_COLLECTIONS.SPA, (data) => setSpaRequests(data as SpaRequest[])));
 
-    // ✅ 2. ABONNEMENT MESSAGERIE & UTILISATEURS
+    // 2. ABONNEMENT MESSAGERIE & UTILISATEURS
     unsubs.push(subscribeToSharedCollection('conversations', (data) => setChannels(data as ChatChannel[])));
     unsubs.push(subscribeToSharedCollection('users', (data) => setAllUsers(data)));
 
@@ -301,10 +301,39 @@ const AuthenticatedApp: React.FC = () => {
     }
   };
 
+  // ✅ CORRECTION TÂCHES : Logique Messagerie et SMS
   const handleSaveTask = (task: Task, options?: { sendSms?: boolean, shareInChat?: boolean }) => {
+    // 1. Sauvegarde de la tâche
     const secureTask = { ...task, ownerId: user?.uid }; 
     saveDocument(DB_COLLECTIONS.TASKS, secureTask);
+    
+    // 2. Logique Messagerie
+    if (options?.shareInChat && task.linkedGroupId) {
+      const channel = channels.find(c => c.id === task.linkedGroupId);
+      if (channel) {
+        const message: ChatMessage = {
+          id: `msg-task-${Date.now()}`,
+          senderId: user?.uid || 'system',
+          senderName: user?.displayName || 'Système',
+          text: `📅 **Nouvelle Tâche assignée** : ${task.text}\nPriorité : ${task.priority}\nÉchéance : ${task.dueDate || 'Non définie'}`,
+          timestamp: new Date().toISOString(),
+          reactions: []
+        };
+        handleSendMessage(channel.id, message);
+      }
+    }
+
+    // 3. Logique SMS (Simulation)
+    if (options?.sendSms && task.linkedContactId) {
+       const contact = contacts.find(c => c.id === task.linkedContactId);
+       if (contact?.phone) {
+         console.log(`[SMS] Envoi à ${contact.phone} : Tâche "${task.text}" créée.`);
+         alert(`Simulation : SMS envoyé à ${contact.name} (${contact.phone})`);
+       }
+    }
+
     setEditTask(null);
+    setShowTaskModal(false);
   };
 
   const handleTaskStatusChange = (id: string | number, status: 'Pas commencé' | 'En cours' | 'Terminé') => {
@@ -516,7 +545,6 @@ const AuthenticatedApp: React.FC = () => {
                 onDeleteChannel={handleDeleteChannel}
                 onSendMessage={handleSendMessage}
                 
-                // ✅ 3. ON PASSE LA LISTE COMPLÈTE DES UTILISATEURS
                 users={allUsers} 
                 contacts={contacts} 
                 userSettings={userSettings} 
@@ -624,55 +652,6 @@ const AuthenticatedApp: React.FC = () => {
           {activeTab === 'inventory' && (user.permissions.canViewFnb ? <InventoryView userSettings={userSettings} inventoryData={inventory} onUpdateInventory={(inv) => syncInventory(inv)} canManage={user.role !== 'staff'} /> : <div className="flex flex-col items-center justify-center h-full text-slate-400"><Lock size={48} className="mb-4 opacity-20" /><p className="font-bold">Accès F&B restreint.</p></div>)}
           {activeTab === 'kitchen' && (user.permissions.canViewFnb ? <KitchenEngineeringView userSettings={userSettings} recipes={recipes} onUpdateRecipes={setRecipes} onNavigate={(tab) => tab === 'dashboard' ? setActiveTab('fnb') : setActiveTab(tab)} inventoryData={inventory} ratioItems={ratioItems} onUpdateRatioItems={setRatioItems} customCategories={ratioCategories} onUpdateCategories={setRatioCategories} /> : <div className="flex flex-col items-center justify-center h-full text-slate-400"><Lock size={48} className="mb-4 opacity-20" /><p className="font-bold">Accès F&B restreint.</p></div>)}
 
-        </div>
-      </div>
-
-      {/* Floating AI Assistant Button */}
-      <button 
-        onClick={() => setShowAiAssistant(true)}
-        className="fixed bottom-24 right-6 md:bottom-10 md:right-10 z-[100] w-14 h-14 bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 group"
-      >
-        <Sparkles size={24} className="animate-pulse group-hover:animate-none" />
-      </button>
-
-      {/* Navigation Bar */}
-      <div className={`fixed bottom-0 left-0 right-0 border-t backdrop-blur-xl z-50 pb-safe ${userSettings.darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
-        <div className="max-w-2xl mx-auto flex justify-between items-center p-2 overflow-x-auto no-scrollbar">
-          {[
-            { id: 'dashboard', icon: Home, label: 'Accueil', access: true },
-            { id: 'agenda', icon: CalendarIcon, label: 'Agenda', access: user.permissions.canViewAgenda },
-            { id: 'reception', icon: Bell, label: 'Réception', access: user.permissions.canViewReception },
-            { id: 'spa', icon: Flower2, label: 'Spa', access: user.permissions.canViewSpa },
-            { id: 'todo', icon: CheckSquare, label: 'Tâches', access: true }, // Toujours dispo
-            { id: 'messaging', icon: MessageSquare, label: 'Messages', badge: totalUnread, access: user.permissions.canViewMessaging },
-            { id: 'housekeeping', icon: BedDouble, label: 'Hébergement', access: user.permissions.canViewHousekeeping }, 
-            { id: 'maintenance', icon: Wrench, label: 'Maintenance', access: user.permissions.canViewMaintenance },
-            { id: 'contacts', icon: Users, label: 'VIP', access: true },
-            { id: 'groups_portal', icon: Briefcase, label: 'Groupes', access: user.permissions.canViewSharedData },
-            { id: 'fnb', icon: UtensilsCrossed, label: 'Gestion F&B', access: user.permissions.canViewFnb }, 
-          ].filter(item => item.access).map((item) => {
-              const isActive = activeTab === item.id || 
-                (item.id === 'fnb' && (activeTab === 'inventory' || activeTab === 'kitchen')) ||
-                (item.id === 'groups_portal' && (activeTab === 'groups_rm' || activeTab === 'groups_crm'));
-
-              return (
-              <button 
-                key={item.id} 
-                onClick={() => setActiveTab(item.id)} 
-                className={`flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl transition-all relative min-w-[60px] ${isActive ? `bg-${userSettings.themeColor}-50 text-${userSettings.themeColor}-600 dark:bg-slate-800 dark:text-${userSettings.themeColor}-400` : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
-              >
-                  <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                  {item.badge ? (
-                    <span className="absolute top-2 right-2 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900">
-                      {item.badge}
-                    </span>
-                  ) : null}
-                  <span className={`text-[9px] font-bold ${isActive ? 'opacity-100' : 'hidden md:block opacity-60'}`}>{item.label}</span>
-              </button>
-          )})}
-        </div>
-      </div>
-
       {/* AI Assistant Modal */}
       <AiAssistant 
         isOpen={showAiAssistant} 
@@ -721,7 +700,8 @@ const AuthenticatedApp: React.FC = () => {
         isOpen={showTaskModal} onClose={() => { setShowTaskModal(false); setEditTask(null); }} 
         contacts={contacts} onSave={handleSaveTask} userSettings={userSettings} editTask={editTask}
         onTriggerCommunication={handleTriggerCommunication}
-        groups={user.permissions.canViewSharedData ? groups : []}
+        // ✅ CORRECTION : On passe les canaux de type 'group' pour la liste déroulante
+        groups={channels.filter(c => c.type === 'group')}
       />
       <GroupModal 
         isOpen={showGroupModal} onClose={() => { setShowGroupModal(false); setEditGroup(null); }} 
@@ -751,6 +731,8 @@ const AuthenticatedApp: React.FC = () => {
         venues={venues}
       />
       <ContactDetailModal isOpen={selectedContactDetail !== null} onClose={() => setSelectedContactDetail(null)} contact={selectedContactDetail} onEdit={(c) => { setSelectedContactDetail(null); setEditContact(c); setShowContactModal(true); }} userSettings={userSettings} />
+        </div>
+      </div>
     </div>
   );
 };
