@@ -132,9 +132,12 @@ const AuthenticatedApp: React.FC = () => {
     }
     return INITIAL_EVENTS;
   });
-  // Note: On garde l'état initial channels, mais il sera écrasé par Firebase
+  
   const [channels, setChannels] = useState<ChatChannel[]>(() => JSON.parse(localStorage.getItem(STORAGE_KEYS.CHANNELS) || JSON.stringify(INITIAL_CHANNELS)));
   
+  // ✅ 1. ÉTAT POUR STOCKER TOUS LES UTILISATEURS
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+
   const [userSettings, setUserSettings] = useState<UserSettings>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     return saved ? JSON.parse(saved) : {
@@ -195,10 +198,11 @@ const AuthenticatedApp: React.FC = () => {
     }));
     unsubs.push(subscribeToSharedCollection(DB_COLLECTIONS.SPA, (data) => setSpaRequests(data as SpaRequest[])));
 
-    // ✅ NOUVEAU : On écoute les messages en temps réel
+    // ✅ 2. ABONNEMENT MESSAGERIE & UTILISATEURS
     unsubs.push(subscribeToSharedCollection('conversations', (data) => setChannels(data as ChatChannel[])));
+    unsubs.push(subscribeToSharedCollection('users', (data) => setAllUsers(data)));
 
-    // 2. ESPACES PRIVÉS
+    // 3. ESPACES PRIVÉS
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.TASKS, user.uid, (data) => setTodos(data as Task[])));
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.AGENDA, user.uid, (data) => {
         const evts = data.map((e: any) => ({ ...e, start: new Date(e.start.seconds ? e.start.seconds * 1000 : e.start) }));
@@ -274,7 +278,7 @@ const AuthenticatedApp: React.FC = () => {
     saveDocument(DB_COLLECTIONS.GROUPS, { ...updatedClient, type_doc: 'client' });
   };
   
-  // ✅ CORRECTION MESSAGERIE : Sauvegarde dans Firebase
+  // MESSAGERIE
   const handleSaveChannel = (channel: ChatChannel) => {
     saveDocument('conversations', channel);
   };
@@ -508,12 +512,12 @@ const AuthenticatedApp: React.FC = () => {
             user.permissions.canViewMessaging ? (
               <MessagingView 
                 channels={channels} 
-                // ✅ PASSAGE DES NOUVELLES FONCTIONS DE SAUVEGARDE
                 onSaveChannel={handleSaveChannel}
                 onDeleteChannel={handleDeleteChannel}
                 onSendMessage={handleSendMessage}
                 
-                users={getAllUsers()} 
+                // ✅ 3. ON PASSE LA LISTE COMPLÈTE DES UTILISATEURS
+                users={allUsers} 
                 contacts={contacts} 
                 userSettings={userSettings} 
                 currentUser={user}
