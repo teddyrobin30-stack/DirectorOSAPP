@@ -69,11 +69,32 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
 
   const handleSave = () => {
     if (!title || !startDate) return;
+
+    // 1. Calculer l'objet Date de départ
+    const startObj = new Date(`${startDate}T${startTime}`);
+
+    // 2. Calculer l'objet Date de fin basé sur la durée (Indispensable pour l'agenda)
+    const endObj = new Date(startObj);
+    if (duration.includes('min')) {
+      endObj.setMinutes(endObj.getMinutes() + parseInt(duration));
+    } else if (duration.includes('h')) {
+      endObj.setHours(endObj.getHours() + parseInt(duration));
+    } else {
+      endObj.setHours(endObj.getHours() + 1); // 1h par défaut
+    }
+
     onSave({
       id: editEvent ? editEvent.id : Date.now(),
-      title, start: new Date(`${startDate}T${startTime}`), 
-      time: startTime, duration, type, linkedContactId: contactId, videoLink: videoLink || undefined
+      title,
+      start: startObj, // ✅ Envoi d'un vrai objet Date
+      end: endObj,     // ✅ Ajout de la date de fin calculée
+      time: startTime,
+      duration,
+      type,
+      linkedContactId: contactId,
+      videoLink: videoLink || undefined
     });
+    
     onClose();
   };
 
