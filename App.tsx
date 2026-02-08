@@ -137,7 +137,8 @@ const AuthenticatedApp: React.FC = () => {
   const [userSettings, setUserSettings] = useState<UserSettings>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     return saved ? JSON.parse(saved) : {
-      userName: user?.displayName || 'Directeur',
+      // ✅ FIX IS HERE: No longer defaults to 'Directeur'
+      userName: user?.displayName || 'Utilisateur',
       themeColor: 'indigo',
       darkMode: false,
       autoDarkMode: false,
