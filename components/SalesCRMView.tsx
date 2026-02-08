@@ -635,24 +635,15 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     setActiveTab('pipeline');
   };
 
-  // ✅ FIX: id comparison stable (string/number)
   const handleUpdateLead = (lead: Lead) => {
-    const targetId = String(lead.id);
-    onUpdateLeads((leads || []).map(l => (String(l.id) === targetId ? lead : l)));
+    onUpdateLeads(leads.map(l => l.id === lead.id ? lead : l));
     setSelectedLead(lead);
   };
 
-  // ✅ FIX: delete works even if id types differ + close details only if same id
-  const handleDeleteLead = (id: string | number) => {
-    const targetId = String(id);
+  const handleDeleteLead = (id: string) => {
     if (!window.confirm('Supprimer ce lead ?')) return;
-
-    const next = (leads || []).filter(l => String(l.id) !== targetId);
-    onUpdateLeads(next);
-
-    if (selectedLead && String(selectedLead.id) === targetId) {
-      setSelectedLead(null);
-    }
+    onUpdateLeads(leads.filter(l => l.id !== id));
+    setSelectedLead(null);
   };
 
   const canValidate = (lead: Lead) =>
@@ -978,11 +969,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                         <div
                           key={lead.id}
                           onClick={() => setSelectedLead(lead)}
-                          className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                            String(selectedLead?.id) === String(lead.id)
-                              ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200'
-                              : 'bg-white dark:bg-slate-900 border-transparent hover:border-slate-200'
-                          }`}
+                          className={`p-4 rounded-2xl border cursor-pointer transition-all ${selectedLead?.id === lead.id ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200' : 'bg-white dark:bg-slate-900 border-transparent hover:border-slate-200'}`}
                         >
                           <div className="flex justify-between items-start mb-2">
                             <h4 className="font-bold text-sm line-clamp-1">{lead.groupName}</h4>
@@ -1238,10 +1225,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
                     <div className="pt-4 flex justify-end">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteLead(selectedLead.id);
-                        }}
+                        onClick={() => handleDeleteLead(selectedLead.id)}
                         className="text-red-400 hover:text-red-600 text-xs font-bold uppercase flex items-center gap-2"
                       >
                         <XCircle size={14} /> Supprimer le lead
