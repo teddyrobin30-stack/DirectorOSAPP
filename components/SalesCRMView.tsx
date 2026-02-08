@@ -761,7 +761,9 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = ({
 
                     {/* Grid */}
                     <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800 text-[10px] font-black text-slate-400 text-center py-2">
-                      {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(d => <div key={d}>{d}</div>)}
+                    {['L', 'Ma', 'Me', 'J', 'V', 'S', 'D'].map((d) => (
+  <div key={d}>{d}</div>
+))}
                     </div>
                     <div className="flex-1 grid grid-cols-7 auto-rows-fr overflow-y-auto">
                       {calendarData.map((date, i) => {
