@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { X, Calendar as CalendarIcon, Clock, MessageSquare, Video, ClipboardPaste, ChevronDown, Trash2 } from 'lucide-react';
 import { Contact, CalendarEvent, UserSettings } from '../types';
@@ -25,11 +24,6 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
   const [isSmsEditing, setIsSmsEditing] = useState(false);
   const [smsMessage, setSmsMessage] = useState('');
 
-  // Pour le sélecteur d'heure personnalisé
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
-  const minutes = ['00', '15', '30', '45'];
-
   const durationPresets = ['15min', '30min', '1h', '2h', '3h'];
 
   useEffect(() => {
@@ -53,7 +47,6 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
       setTitle(''); setDuration('1h'); setContactId(''); setType('pro'); setVideoLink('');
     }
     setIsSmsEditing(false);
-    setShowTimePicker(false);
   }, [editEvent, isOpen]);
 
   useEffect(() => {
@@ -70,31 +63,30 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
   const handleSave = () => {
     if (!title || !startDate) return;
 
-    // 1. Calculer l'objet Date de départ
+    // 1. Calculer la date de départ
     const startObj = new Date(`${startDate}T${startTime}`);
 
-    // 2. Calculer l'objet Date de fin basé sur la durée (Indispensable pour l'agenda)
+    // 2. Calculer la date de fin basée sur la durée (crucial pour l'agenda)
     const endObj = new Date(startObj);
     if (duration.includes('min')) {
       endObj.setMinutes(endObj.getMinutes() + parseInt(duration));
     } else if (duration.includes('h')) {
       endObj.setHours(endObj.getHours() + parseInt(duration));
     } else {
-      endObj.setHours(endObj.getHours() + 1); // 1h par défaut
+      endObj.setHours(endObj.getHours() + 1);
     }
 
     onSave({
       id: editEvent ? editEvent.id : Date.now(),
       title,
-      start: startObj, // ✅ Envoi d'un vrai objet Date
-      end: endObj,     // ✅ Ajout de la date de fin calculée
-      time: startTime,
-      duration,
-      type,
-      linkedContactId: contactId,
+      start: startObj, 
+      end: endObj, 
+      time: startTime, 
+      duration, 
+      type, 
+      linkedContactId: contactId, 
       videoLink: videoLink || undefined
     });
-    
     onClose();
   };
 
@@ -104,11 +96,6 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
         onDelete(editEvent.id);
       }
     }
-  };
-
-  const handleTimeSelect = (h: string, m: string) => {
-    setStartTime(`${h}:${m}`);
-    setShowTimePicker(false);
   };
 
   const themeBg = `bg-${userSettings.themeColor}-600`;
@@ -127,7 +114,6 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
 
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3 px-2">
-             {/* Date Picker Fix: Overlay Method */}
              <div className="space-y-1">
                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Date</label>
                <div className="relative h-[58px]">
@@ -146,40 +132,23 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
                </div>
              </div>
 
-             {/* Time Picker 1/4 d'heure */}
-             <div className="space-y-1 relative">
+             <div className="space-y-1">
                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Heure</label>
-               <button 
-                 type="button"
-                 onClick={() => setShowTimePicker(!showTimePicker)}
-                 className="w-full p-4 rounded-2xl border-2 border-slate-50 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 flex items-center justify-between shadow-sm hover:border-indigo-400 transition-colors"
-               >
-                 <div className="flex items-center gap-3">
-                   <Clock size={18} className="text-indigo-500" />
-                   <span className="font-black text-sm">{startTime}</span>
+               <div className="relative h-[58px]">
+                 <div className="absolute inset-0 p-4 rounded-2xl border-2 border-slate-50 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 flex items-center justify-between shadow-sm hover:border-indigo-400 transition-colors">
+                   <div className="flex items-center gap-3">
+                     <Clock size={18} className="text-indigo-500" />
+                     <span className="font-black text-sm">{startTime}</span>
+                   </div>
+                   <ChevronDown size={16} className="text-slate-400" />
                  </div>
-                 <ChevronDown size={16} className={`text-slate-400 transition-transform ${showTimePicker ? 'rotate-180' : ''}`} />
-               </button>
-
-               {showTimePicker && (
-                 <div className="absolute top-full left-0 right-0 mt-2 p-3 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-3xl shadow-2xl z-50 animate-in zoom-in-95">
-                    <div className="grid grid-cols-4 gap-2 h-40 overflow-y-auto no-scrollbar py-2">
-                      {hours.map(h => (
-                        <div key={h} className="contents">
-                          {minutes.map(m => (
-                            <button 
-                              key={`${h}:${m}`} 
-                              onClick={() => handleTimeSelect(h, m)}
-                              className={`p-2 rounded-xl text-[10px] font-black transition-all ${startTime === `${h}:${m}` ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-500'}`}
-                            >
-                              {h}:{m}
-                            </button>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                 </div>
-               )}
+                 <input 
+                    type="time" 
+                    value={startTime} 
+                    onChange={(e) => setStartTime(e.target.value)} 
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                 />
+               </div>
              </div>
           </div>
 
@@ -191,6 +160,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
             </div>
           </div>
 
+          {/* Reste du code (Visio, SMS, etc.) identique à l'original... */}
           <div className="px-2 space-y-3">
              <div className="flex justify-between items-center">
                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Options de Visio</label>
