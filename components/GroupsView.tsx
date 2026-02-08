@@ -145,7 +145,7 @@ const GroupsView: React.FC<GroupsViewProps> = ({
 
   return (
     <div className="px-6 py-6 space-y-8 animate-in fade-in pb-32">
-      {/* Header avec Configuration et Calendrier Lieux */}
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h2 className="text-2xl font-black">RM Groupes</h2>
