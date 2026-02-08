@@ -4,7 +4,7 @@ import { UserSettings, UserRole } from '../types';
 import { THEME_COLORS } from '../constants';
 import { useAuth, getDefaultPermissions } from '../services/authContext';
 import AdvancedAccessModal from './AdvancedAccessModal';
-import { useUsers } from '../hooks/useUsers'; // <-- 1. IMPORT AJOUTÉ ICI
+import { useUsers } from '../hooks/useUsers'; // ✅ Import du Hook
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -31,8 +31,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
   // Advanced Modal State
   const [showAdvancedAccess, setShowAdvancedAccess] = useState(false);
 
-  // 2. MODIFICATION MAJEURE ICI : On utilise le Hook au lieu du State local
-  // "users: userList" veut dire : récupère 'users' du hook, mais appelle-le 'userList' dans ce fichier
+  // ✅ UTILISATION DU HOOK (Remplace le useState local)
   const { users: userList } = useUsers(); 
 
   const isAdmin = user?.role === 'admin';
@@ -48,15 +47,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
   const handleSaveSettings = async () => {
     setIsSaving(true);
     try {
-      // 1. Si le nom a changé, mettre à jour le profil AUTH (Base de données)
       if (user && settings.userName !== user.displayName) {
         await updateProfile(settings.userName);
       }
-      
-      // 2. Mettre à jour les préférences locales (Theme, etc.)
       onSave(settings);
-
-      // 3. Fermer la modale uniquement si succès
       onClose();
     } catch (e) {
       console.error("Erreur critique sauvegarde réglages:", e);
@@ -71,7 +65,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
     try {
       await registerUser(newUserEmail, newUserPwd, newUserRole, newUserName, getDefaultPermissions(newUserRole));
       setNewUserEmail(''); setNewUserPwd(''); setNewUserName(''); setIsCreatingUser(false);
-      // 3. SUPPRESSION DU RAFRAÎCHISSEMENT MANUEL (C'est automatique maintenant)
+      // Plus besoin de setUserList ici, c'est automatique !
     } catch (e: any) {
       alert(e.message);
     }
@@ -81,7 +75,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
     if(window.confirm("Supprimer cet utilisateur ?")) {
       try {
         await deleteUser(uid);
-        // 3. SUPPRESSION DU RAFRAÎCHISSEMENT MANUEL (C'est automatique maintenant)
+        // Plus besoin de setUserList ici non plus !
       } catch (e: any) {
         alert(e.message);
       }
@@ -93,7 +87,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-black/80 flex items-end md:items-center md:justify-center animate-in fade-in backdrop-blur-md">
-        {/* Modal Content */}
         <div className={`w-full md:max-w-2xl md:rounded-[40px] md:mx-4 rounded-t-[40px] p-6 pb-8 animate-in slide-in-from-bottom-20 md:slide-in-from-bottom-10 shadow-2xl max-h-[90%] md:max-h-[85%] flex flex-col ${settings.darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-950'}`}>
           
           <div className="flex justify-between items-center mb-6 flex-shrink-0 px-2">
@@ -108,8 +101,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
             {/* Profil & Préférences */}
             <div className="space-y-4">
               <label className={`text-[10px] font-black uppercase tracking-[0.2em] ml-1 ${settings.darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Profil & Préférences</label>
-              
-              {/* Nom */}
               <div className={`flex items-center gap-4 px-4 py-3.5 rounded-[22px] border-2 transition-all ${settings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100 focus-within:border-indigo-500'}`}>
                 <div className="p-2 bg-indigo-500 rounded-xl text-white">
                   <User size={18} />
@@ -162,8 +153,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
                <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800 animate-in fade-in">
                  <div className="flex justify-between items-center px-1">
                    <label className={`text-[10px] font-black uppercase tracking-[0.2em] ${settings.darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Gestion Utilisateurs</label>
-                   
-                   {/* NEW: ADVANCED ACCESS BUTTON */}
                    <button 
                      onClick={() => setShowAdvancedAccess(true)}
                      className="px-4 py-2 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-[10px] font-black uppercase flex items-center gap-2 shadow-lg hover:opacity-90 transition-opacity"
@@ -172,7 +161,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
                    </button>
                  </div>
 
-                 {/* Quick Add User (Legacy preserved but simplified) */}
                  <button onClick={() => setIsCreatingUser(!isCreatingUser)} className="text-indigo-500 text-[10px] font-black uppercase flex items-center gap-1 pl-1">
                      <Plus size={12} /> Ajout Rapide
                  </button>
@@ -222,7 +210,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
                </div>
             )}
 
-            {/* Zone de Danger (Admin Only) */}
             {isAdmin && (
               <div className="space-y-2 pt-4 border-t border-slate-100 dark:border-slate-800">
                  <button 
@@ -265,7 +252,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
         </div>
       </div>
 
-      {/* ADVANCED MODAL */}
       <AdvancedAccessModal 
         isOpen={showAdvancedAccess} 
         onClose={() => setShowAdvancedAccess(false)} 
