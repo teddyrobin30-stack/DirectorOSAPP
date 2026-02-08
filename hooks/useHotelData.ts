@@ -9,7 +9,6 @@ import {
   INITIAL_CONTACTS, INITIAL_TODOS, INITIAL_GROUPS, INITIAL_EVENTS, 
   INITIAL_INVENTORY, INITIAL_RECIPES, INITIAL_ROOMS, INITIAL_TICKETS, 
   INITIAL_CHANNELS, INITIAL_LOGS 
-  // ... importe les autres initial data si nécessaire
 } from '../services/mockData';
 import { 
   Contact, Task, Group, CalendarEvent, Room, MaintenanceTicket, 
@@ -17,6 +16,9 @@ import {
   TaxiBooking, LostItem, SpaRequest, Client, MonthlyInventory, 
   Recipe, RatioItem, ChatChannel 
 } from '../types';
+
+// ✅ IMPORT DU HOOK COMPLEMENTAIRE (Pour éviter le doublon)
+import { useUsers } from './useUsers';
 
 // Helper pour le LocalStorage pour alléger le code
 function useStickyState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -32,6 +34,10 @@ function useStickyState<T>(key: string, defaultValue: T): [T, React.Dispatch<Rea
 }
 
 export const useHotelData = (user: any) => {
+  // ✅ UTILISATION DE useUsers (Composition)
+  // On récupère la liste des utilisateurs gérée par l'autre hook
+  const { users: allUsers } = useUsers();
+
   // --- STATES (Initialisés via LocalStorage ou Mock) ---
   const [contacts, setContacts] = useStickyState<Contact[]>('hotelos_contacts_v3', INITIAL_CONTACTS);
   const [todos, setTodos] = useStickyState<Task[]>('hotelos_todos_v3', INITIAL_TODOS);
@@ -56,7 +62,8 @@ export const useHotelData = (user: any) => {
   const [laundryIssues, setLaundryIssues] = useState<any[]>([]); // Typage à affiner
   const [ratioItems, setRatioItems] = useState<RatioItem[]>([]);
   const [ratioCategories, setRatioCategories] = useState<string[]>([]);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
+  
+  // ❌ SUPPRIMÉ : const [allUsers, setAllUsers] = useState<any[]>([]); (Géré par useUsers désormais)
 
   // --- FIREBASE SUBSCRIPTIONS ---
   useEffect(() => {
@@ -91,9 +98,10 @@ export const useHotelData = (user: any) => {
     }));
     unsubs.push(subscribeToSharedCollection(DB_COLLECTIONS.SPA, (data) => setSpaRequests(data as SpaRequest[])));
 
-    // 2. MESSAGERIE & USERS
+    // 2. MESSAGERIE
     unsubs.push(subscribeToSharedCollection('conversations', (data) => setChannels(data as ChatChannel[])));
-    unsubs.push(subscribeToSharedCollection('users', (data) => setAllUsers(data)));
+    
+    // ❌ SUPPRIMÉ : unsubs.push(subscribeToSharedCollection('users', (data) => setAllUsers(data))); (Doublon évité)
 
     // 3. ESPACES PRIVÉS
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.TASKS, user.uid, (data) => setTodos(data as Task[])));
@@ -134,6 +142,6 @@ export const useHotelData = (user: any) => {
     laundryIssues, setLaundryIssues,
     ratioItems, setRatioItems,
     ratioCategories, setRatioCategories,
-    allUsers
+    allUsers // Vient maintenant de useUsers()
   };
 };
