@@ -323,12 +323,20 @@ const AuthenticatedApp: React.FC = () => {
       }
     }
 
-    // 3. Logique SMS (Simulation)
+    // ✅ 3. LOGIQUE SMS RÉELLE (Ouverture de l'appli SMS)
     if (options?.sendSms && task.linkedContactId) {
        const contact = contacts.find(c => c.id === task.linkedContactId);
        if (contact?.phone) {
-         console.log(`[SMS] Envoi à ${contact.phone} : Tâche "${task.text}" créée.`);
-         alert(`Simulation : SMS envoyé à ${contact.name} (${contact.phone})`);
+         // Crée le message
+         const body = `HotelOS: Tâche pour ${contact.name}.\n${task.text}\nPour le: ${task.dueDate || 'ASAP'}`;
+         
+         // Encode pour l'URL
+         const encodedBody = encodeURIComponent(body);
+         
+         // Ouvre l'application SMS native
+         window.location.href = `sms:${contact.phone}?body=${encodedBody}`;
+       } else {
+         alert("Ce contact n'a pas de numéro de téléphone enregistré.");
        }
     }
 
