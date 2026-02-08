@@ -6,7 +6,7 @@ import {
   Archive, Download, ArrowDownUp, Check,
   LayoutList, CalendarDays, ChevronLeft, ChevronRight, Trash2
 } from 'lucide-react';
-import type {
+import {
   Lead,
   UserSettings,
   UserProfile,
@@ -26,11 +26,11 @@ interface SalesCRMViewProps {
   inbox?: InboxItem[];
   onUpdateInbox?: (items: InboxItem[]) => void;
 
-  // ✅ Clients "groupes / CRM"
+  // Legacy / compat
   clients?: Client[];
   onUpdateClients?: (clients: Client[]) => void;
 
-  // ✅ Contacts "application" (ContactsView)
+  // ✅ Preferred: contacts from ContactsView (application)
   contacts?: Contact[];
   onUpdateContacts?: (contacts: Contact[]) => void;
 
@@ -46,17 +46,20 @@ const safeDate = (date: any) => {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 };
 
+// ✅ Stable unique id (avoids key collisions => DOM NotFoundError)
 const uid = (prefix: string) => {
   try {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
       // @ts-ignore
       return `${prefix}-${crypto.randomUUID()}`;
     }
-  } catch {}
+  } catch {
+    // no-op
+  }
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-// ✅ keep "YYYY-MM-DD" for <input type="date">
+// ✅ keep "YYYY-MM-DD" for <input type="date"> (avoid timezone surprises)
 const toDateInputValue = (v?: string) => {
   if (!v) return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
@@ -80,9 +83,12 @@ const defaultRooms = (): Rooms => ({ single: 0, twin: 0, double: 0, family: 0 })
 
 const normalizePhone = (phone: string) => (phone || '').replace(/[^\d+]/g, '');
 
+// France: convert "06xxxxxxxx" / "07xxxxxxxx" / "01..." etc. => +33xxxxxxxxx
+// Also accepts "33xxxxxxxxx" or "+33xxxxxxxxx"
 const toE164FR = (raw: string) => {
   const p = normalizePhone(raw);
   if (!p) return '';
+
   if (p.startsWith('+33')) return p;
   if (/^33\d{9}$/.test(p)) return `+${p}`;
   if (/^0\d{9}$/.test(p)) return `+33${p.slice(1)}`;
@@ -211,37 +217,41 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     onUpdateInbox,
     clients = [],
     onUpdateClients,
-    contacts = [],
+    contacts,
     onUpdateContacts,
     users,
     onNavigate
   } = props;
 
-  /* -------------------- DATA SOURCES (SEPARATED) -------------------- */
-  // ✅ Contacts = application (ContactsView)
-  const appContacts = useMemo(() => (Array.isArray(contacts) ? contacts : []), [contacts]);
+  /* -------------------- CONTACTS (APPLICATION FIRST) -------------------- */
+  // ✅ Use ContactsView data if provided, else fallback to legacy clients for compat.
+  const appContacts: any[] = useMemo(() => {
+    if (Array.isArray(contacts)) return contacts as any[];
+    return Array.isArray(clients) ? (clients as any[]) : [];
+  }, [contacts, clients]);
 
-  // ✅ Clients = base "groupes / CRM"
-  const groupClients = useMemo(() => (Array.isArray(clients) ? clients : []), [clients]);
+  const updateAppContacts = (next: any[]) => {
+    // Prefer application contacts updater
+    if (typeof onUpdateContacts === 'function') {
+      onUpdateContacts(next as any);
+      return;
+    }
+    // Fallback legacy
+    if (typeof onUpdateClients === 'function') {
+      onUpdateClients(next as any);
+    }
+  };
 
-  /* -------------------- NORMALIZERS -------------------- */
-  // Contact (application)
-  const getContactId = (c: Contact) => String(c?.id ?? '');
-  const getContactName = (c: Contact) => String(c?.name ?? '');
-  const getContactCompany = (c: Contact) => String(c?.company ?? c?.category ?? '');
-  const getContactRole = (c: Contact) => String(c?.role ?? '');
-  const getContactEmail = (c: Contact) => String(c?.email ?? '');
-  const getContactPhone = (c: Contact) => String(c?.phone ?? '');
-  const isVip = (c: Contact) => Boolean((c as any)?.vip);
+  // Normalization getters (Contact vs Client)
+  const getContactId = (c: any) => String(c?.id ?? '');
+  const getContactName = (c: any) => String(c?.name ?? '');
+  const getContactCompany = (c: any) => String(c?.companyName ?? c?.company ?? '');
+  const getContactRole = (c: any) => String(c?.role ?? '');
+  const getContactEmail = (c: any) => String(c?.email ?? '');
+  const getContactPhone = (c: any) => String(c?.phone ?? '');
+  const isVip = (c: any) => Boolean(c?.vip);
 
-  // Client (group DB)
-  const getClientId = (c: Client) => String(c?.id ?? '');
-  const getClientName = (c: Client) => String(c?.name ?? '');
-  const getClientCompany = (c: Client) => String(c?.companyName ?? c?.name ?? '');
-  const getClientEmail = (c: Client) => String(c?.email ?? '');
-  const getClientPhone = (c: Client) => String(c?.phone ?? '');
-
-  // ✅ VIP first, then alpha (contacts app)
+  // ✅ Candidates for pickers: VIP first, then alpha
   const vipCandidates = useMemo(() => {
     const arr = [...(appContacts || [])];
     arr.sort((a, b) => {
@@ -256,7 +266,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   /* -------------------- UI STATE -------------------- */
   const [activeTab, setActiveTab] = useState<'pipeline' | 'inbox' | 'contacts' | 'new_lead' | 'archives'>('pipeline');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [selectedContactId, setSelectedContactId] = useState<string>(''); // app contact id
+  const [selectedContactId, setSelectedContactId] = useState<string>(''); // unified
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // PIPELINE
@@ -264,25 +274,20 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   const [pipelineSearch, setPipelineSearch] = useState('');
   const [pipelineSort, setPipelineSort] = useState<'event_asc' | 'urgency' | 'created_desc' | 'alpha'>('event_asc');
   const [pipelineFilter, setPipelineFilter] = useState<string>('ALL');
+
+  // ✅ calendar date (do NOT mutate Date instance)
   const [calendarDate, setCalendarDate] = useState(() => new Date());
 
-  // INBOX sorting/filtering
+  // INBOX (✅ full tri system)
   const [inboxSearch, setInboxSearch] = useState('');
   const [inboxSort, setInboxSort] = useState<
     'date_desc' | 'date_asc' | 'urgency' | 'event_date' | 'alpha' | 'source' | 'company' | 'quote'
   >('date_desc');
   const [inboxFilter, setInboxFilter] = useState<'ALL' | 'URGENT' | 'EMAIL' | 'PHONE' | 'WEB' | 'THIS_MONTH'>('ALL');
 
-  // Pickers
-  const [selectedVipId, setSelectedVipId] = useState<string>(''); // app contact for new lead
-  const [selectedInboxVipId, setSelectedInboxVipId] = useState<string>(''); // app contact for inbox
-
-  // ✅ NEW: group client selection + search (inbox + new lead)
-  const [clientSearchInbox, setClientSearchInbox] = useState('');
-  const [selectedGroupClientInboxId, setSelectedGroupClientInboxId] = useState<string>('');
-
-  const [clientSearchLead, setClientSearchLead] = useState('');
-  const [selectedGroupClientLeadId, setSelectedGroupClientLeadId] = useState<string>('');
+  // Contact select states (kept naming to avoid breaking anything)
+  const [selectedVipId, setSelectedVipId] = useState<string>('');
+  const [selectedInboxVipId, setSelectedInboxVipId] = useState<string>('');
 
   const selectedVip = useMemo(() => {
     if (!selectedVipId) return null;
@@ -298,29 +303,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     if (!selectedContactId) return null;
     return (appContacts || []).find(c => getContactId(c) === String(selectedContactId)) || null;
   }, [selectedContactId, appContacts]);
-
-  // Filtered group clients for search
-  const filteredGroupClientsInbox = useMemo(() => {
-    const q = safeLower(clientSearchInbox);
-    if (!q) return groupClients;
-    return groupClients.filter(c =>
-      safeLower(getClientName(c)).includes(q) ||
-      safeLower(getClientCompany(c)).includes(q) ||
-      safeLower(getClientEmail(c)).includes(q) ||
-      safeLower(getClientPhone(c)).includes(q)
-    );
-  }, [groupClients, clientSearchInbox]);
-
-  const filteredGroupClientsLead = useMemo(() => {
-    const q = safeLower(clientSearchLead);
-    if (!q) return groupClients;
-    return groupClients.filter(c =>
-      safeLower(getClientName(c)).includes(q) ||
-      safeLower(getClientCompany(c)).includes(q) ||
-      safeLower(getClientEmail(c)).includes(q) ||
-      safeLower(getClientPhone(c)).includes(q)
-    );
-  }, [groupClients, clientSearchLead]);
 
   // NEW LEAD FORM (+ rooms)
   const [form, setForm] = useState<(Partial<Lead> & { rooms: Rooms })>({
@@ -361,15 +343,14 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   // CONTACTS
   const [contactSearch, setContactSearch] = useState('');
 
-  /* -------------------- CONTACT ACTIONS (APPLICATION CONTACTS) -------------------- */
-  const handleDeleteAppContact = (id: string) => {
+  /* -------------------- CONTACT ACTIONS (SAFE) -------------------- */
+  const handleDeleteClient = (id: string) => {
     const targetId = String(id);
     if (!window.confirm('Supprimer ce contact définitivement ?')) return;
 
     const next = (appContacts || []).filter(c => getContactId(c) !== targetId);
+    updateAppContacts(next);
 
-    // ✅ delete locally + persist via callback if provided
-    if (typeof onUpdateContacts === 'function') onUpdateContacts(next);
     if (selectedContactId === targetId) setSelectedContactId('');
   };
 
@@ -400,58 +381,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     document.body.removeChild(link);
   };
 
-  /* -------------------- PREFILL HELPERS -------------------- */
-  const prefillFromAppContact = (c: Contact | null, target: 'inbox' | 'lead') => {
-    if (!c) return;
-    const name = getContactName(c);
-    const email = getContactEmail(c);
-    const phone = getContactPhone(c);
-    const company = getContactCompany(c);
-
-    if (target === 'inbox') {
-      setInboxForm(prev => ({
-        ...prev,
-        contactName: prev.contactName || name,
-        companyName: prev.companyName || company,
-        email: prev.email || email,
-        phone: prev.phone || phone,
-      }));
-    } else {
-      setForm(prev => ({
-        ...prev,
-        contactName: prev.contactName || name,
-        email: prev.email || email,
-        phone: prev.phone || phone,
-      }));
-    }
-  };
-
-  const prefillFromGroupClient = (c: Client | null, target: 'inbox' | 'lead') => {
-    if (!c) return;
-    const company = getClientCompany(c);
-    const name = getClientName(c);
-    const email = getClientEmail(c);
-    const phone = getClientPhone(c);
-
-    if (target === 'inbox') {
-      setInboxForm(prev => ({
-        ...prev,
-        companyName: prev.companyName || company,
-        contactName: prev.contactName || name,
-        email: prev.email || email,
-        phone: prev.phone || phone,
-      }));
-    } else {
-      setForm(prev => ({
-        ...prev,
-        groupName: prev.groupName || (company ? `Groupe ${company}` : ''),
-        contactName: prev.contactName || name,
-        email: prev.email || email,
-        phone: prev.phone || phone,
-      }));
-    }
-  };
-
   /* -------------------- INBOX LOGIC -------------------- */
   const handleSaveInbox = () => {
     if (!inboxForm.contactName || !onUpdateInbox) return;
@@ -477,9 +406,9 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
     onUpdateInbox([newItem, ...inbox]);
 
-    // ✅ Optionnel : enrichir/ajouter le contact côté "application" si callback présent
-    // (sans écraser ce qui existe déjà)
-    if (typeof onUpdateContacts === 'function') {
+    // ✅ Update/Create contact in APPLICATION contacts (safe + best effort)
+    const canUpdate = typeof onUpdateContacts === 'function' || typeof onUpdateClients === 'function';
+    if (canUpdate) {
       const emailLower = safeLower(inboxForm.email);
       const nameLower = safeLower(inboxForm.contactName);
 
@@ -491,28 +420,31 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
       const nextPhone = toE164FR(inboxForm.phone) || inboxForm.phone;
 
       if (existing) {
-        const updated: Contact = {
+        // Only enrich missing fields (do not overwrite user-entered data)
+        const updated = {
           ...existing,
           email: getContactEmail(existing) || inboxForm.email,
           phone: getContactPhone(existing) || nextPhone,
         };
         const next = (appContacts || []).map(c => getContactId(c) === getContactId(existing) ? updated : c);
-        onUpdateContacts(next);
+        updateAppContacts(next);
       } else {
+        // Create minimal safe contact compatible with both models
         const newContact: any = {
           id: uid('ct'),
           name: inboxForm.contactName,
-          role: '',
           company: inboxForm.companyName || '',
-          phone: nextPhone || '',
+          companyName: inboxForm.companyName || '',
+          role: '',
           email: inboxForm.email || '',
+          phone: nextPhone || '',
           vip: false,
+          status: 'In House',
         };
-        onUpdateContacts([newContact, ...(appContacts || [])]);
+        updateAppContacts([newContact, ...(appContacts || [])]);
       }
     }
 
-    // reset
     setInboxForm({
       contactName: '',
       companyName: '',
@@ -525,8 +457,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
       rooms: defaultRooms(),
     });
     setSelectedInboxVipId('');
-    setSelectedGroupClientInboxId('');
-    setClientSearchInbox('');
   };
 
   const handleValidateRequest = (item: InboxItem) => {
@@ -578,9 +508,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     return (now.getTime() - ref.getTime()) > 48 * 3600 * 1000;
   };
 
+  // ✅ FULL SORTING + FILTERING (SAFE)
   const processedInbox = useMemo(() => {
     let items = [...(inbox || [])].filter(i => i.status === 'to_process');
 
+    // Search
     if (inboxSearch) {
       const lower = safeLower(inboxSearch);
       items = items.filter(i =>
@@ -591,6 +523,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
       );
     }
 
+    // Filters
     if (inboxFilter !== 'ALL') {
       try {
         if (inboxFilter === 'URGENT') {
@@ -603,6 +536,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
             return !Number.isNaN(d.getTime()) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
           });
         } else {
+          // EMAIL / PHONE / WEB
           items = items.filter(i => {
             const src = safeLower(i.source);
             if (inboxFilter === 'EMAIL') return src === 'email';
@@ -611,23 +545,32 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
             return true;
           });
         }
-      } catch {}
+      } catch {
+        // no-op
+      }
     }
 
+    // Sorting
     items.sort((a, b) => {
       try {
         switch (inboxSort) {
           case 'date_asc': return safeDate(a.requestDate) - safeDate(b.requestDate);
           case 'date_desc': return safeDate(b.requestDate) - safeDate(a.requestDate);
+
           case 'alpha': return safeLower(a.contactName).localeCompare(safeLower(b.contactName), 'fr', { sensitivity: 'base' });
+
           case 'company': return safeLower(a.companyName).localeCompare(safeLower(b.companyName), 'fr', { sensitivity: 'base' });
+
           case 'source': return safeLower(String(a.source)).localeCompare(safeLower(String(b.source)), 'fr', { sensitivity: 'base' });
+
           case 'quote': {
+            // quoteSent false first (needs action), then by date desc
             const qa = a.quoteSent ? 1 : 0;
             const qb = b.quoteSent ? 1 : 0;
             if (qa !== qb) return qa - qb;
             return safeDate(b.requestDate) - safeDate(a.requestDate);
           }
+
           case 'event_date': {
             const da = safeDate(a.eventStartDate);
             const db = safeDate(b.eventStartDate);
@@ -635,12 +578,15 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
             if (!db) return -1;
             return da - db;
           }
+
           case 'urgency': {
             const ua = checkIsOverdue(a) ? 1 : 0;
             const ub = checkIsOverdue(b) ? 1 : 0;
             if (ub !== ua) return ub - ua;
+            // tie-break: oldest first
             return safeDate(a.requestDate) - safeDate(b.requestDate);
           }
+
           default: return 0;
         }
       } catch {
@@ -685,31 +631,20 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
       endDate: '',
       rooms: defaultRooms(),
     });
-
     setSelectedVipId('');
-    setSelectedGroupClientLeadId('');
-    setClientSearchLead('');
     setActiveTab('pipeline');
   };
 
   const handleUpdateLead = (lead: Lead) => {
-  onUpdateLeads((leads || []).map(l => (sameId(l.id, lead.id) ? lead : l)));
-  setSelectedLead(lead);
-};
+    onUpdateLeads(leads.map(l => l.id === lead.id ? lead : l));
+    setSelectedLead(lead);
+  };
 
-const handleDeleteLead = (id: string | number) => {
-  const targetId = String(id);
-  if (!window.confirm('Supprimer ce lead ?')) return;
-
-  const next = (leads || []).filter(l => String(l.id) !== targetId);
-  onUpdateLeads(next);
-
-  // si tu viens de supprimer celui sélectionné, on ferme la fiche
-  if (selectedLead && String(selectedLead.id) === targetId) {
+  const handleDeleteLead = (id: string) => {
+    if (!window.confirm('Supprimer ce lead ?')) return;
+    onUpdateLeads(leads.filter(l => l.id !== id));
     setSelectedLead(null);
-  }
-};
-
+  };
 
   const canValidate = (lead: Lead) =>
     lead.checklist.roomSetup && lead.checklist.menu && lead.checklist.roomingList;
@@ -786,7 +721,9 @@ const handleDeleteLead = (id: string | number) => {
             return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
           });
         }
-      } catch {}
+      } catch {
+        // no-op
+      }
     }
 
     items.sort((a, b) => {
@@ -824,8 +761,8 @@ const handleDeleteLead = (id: string | number) => {
     const lastDay = new Date(year, month + 1, 0);
 
     const days: (Date | null)[] = [];
-    let startDay = firstDay.getDay();
-    startDay = startDay === 0 ? 6 : startDay - 1;
+    let startDay = firstDay.getDay(); // 0=Sun
+    startDay = startDay === 0 ? 6 : startDay - 1; // Mon=0
     for (let i = 0; i < startDay; i++) days.push(null);
     for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
     return days;
@@ -962,33 +899,358 @@ const handleDeleteLead = (id: string | number) => {
       {/* Content */}
       <div className="flex-1 overflow-hidden p-4 md:px-6 md:pb-20 flex flex-col md:flex-row gap-4 md:gap-6">
 
-        {/* -------------------- PIPELINE (inchangé) -------------------- */}
+        {/* PIPELINE */}
         {activeTab === 'pipeline' && (
           <>
-            {/* ... ton pipeline (inchangé) ... */}
-            {/* Pour garder la réponse lisible, je n’ai pas modifié cette partie */}
-            {/* Tu peux conserver exactement ton code pipeline existant ici */}
-            <div className="w-full">
-              <div className="p-8 rounded-[32px] border bg-white dark:bg-slate-800 dark:border-slate-700">
-                <p className="text-sm font-bold opacity-60">
-                  ✅ Pipeline inchangé dans cette version (colle ta partie pipeline ici telle quelle).
-                </p>
+            <div className={`w-full md:w-1/3 flex flex-col rounded-[32px] border overflow-hidden ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'} ${pipelineViewMode === 'calendar' ? 'md:w-2/3' : ''}`}>
+              <div className="p-4 border-b border-slate-100 dark:border-slate-700 space-y-3">
+                <div className="flex gap-2">
+                  <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border border-transparent focus-within:border-indigo-500 transition-colors">
+                    <Search size={16} className="text-slate-400 mr-2" />
+                    <input
+                      type="text"
+                      placeholder="🔍 Chercher un groupe..."
+                      value={pipelineSearch}
+                      onChange={(e) => setPipelineSearch(e.target.value)}
+                      className="bg-transparent outline-none w-full text-xs font-bold"
+                    />
+                  </div>
+
+                  <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
+                    <button
+                      onClick={() => setPipelineViewMode('list')}
+                      className={`p-2 rounded-lg transition-all ${pipelineViewMode === 'list' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-400'}`}
+                      title="Vue Liste"
+                    >
+                      <LayoutList size={16} />
+                    </button>
+                    <button
+                      onClick={() => setPipelineViewMode('calendar')}
+                      className={`p-2 rounded-lg transition-all ${pipelineViewMode === 'calendar' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-400'}`}
+                      title="Vue Calendrier"
+                    >
+                      <CalendarDays size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                {pipelineViewMode === 'list' && (
+                  <div className="relative">
+                    <div className="flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border border-transparent">
+                      <ArrowDownUp size={14} className="text-slate-400 mr-2" />
+                      <select
+                        value={pipelineSort}
+                        onChange={(e) => setPipelineSort(e.target.value as any)}
+                        className="bg-transparent outline-none w-full text-xs font-bold appearance-none cursor-pointer"
+                      >
+                        <option value="event_asc">📅 Prochaines Arrivées (Défaut)</option>
+                        <option value="created_desc">🆕 Date de Création</option>
+                        <option value="urgency">🚨 Urgence / Retard</option>
+                        <option value="alpha">Abc Alphabétique</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                  <button onClick={() => setPipelineFilter('ALL')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${pipelineFilter === 'ALL' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>Tous</button>
+                  <button onClick={() => setPipelineFilter('URGENT_ARRIVAL')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${pipelineFilter === 'URGENT_ARRIVAL' ? 'bg-red-500 text-white border-red-500' : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:text-red-500'}`}>🚨 J-30</button>
+                  <button onClick={() => setPipelineFilter('LATE_FOLLOWUP')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${pipelineFilter === 'LATE_FOLLOWUP' ? 'bg-amber-500 text-white border-amber-500' : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500'}`}>⚠️ Relance</button>
+                  <button onClick={() => setPipelineFilter('THIS_MONTH')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${pipelineFilter === 'THIS_MONTH' ? 'bg-violet-500 text-white border-violet-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>📅 Ce Mois</button>
+                </div>
               </div>
+
+              <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar bg-slate-50/50 dark:bg-slate-900/50">
+                {pipelineViewMode === 'list' ? (
+                  <>
+                    {processedLeads.map(lead => {
+                      const alerts = checkAlerts(lead);
+                      return (
+                        <div
+                          key={lead.id}
+                          onClick={() => setSelectedLead(lead)}
+                          className={`p-4 rounded-2xl border cursor-pointer transition-all ${selectedLead?.id === lead.id ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200' : 'bg-white dark:bg-slate-900 border-transparent hover:border-slate-200'}`}
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-bold text-sm line-clamp-1">{lead.groupName}</h4>
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                              lead.status === 'valide' ? 'bg-emerald-100 text-emerald-700' :
+                              lead.status === 'perdu' ? 'bg-slate-200 text-slate-500' :
+                              lead.status === 'nouveau' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {lead.status.replace('_', ' ')}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-xs text-slate-500">
+                            <span>{lead.contactName}</span>
+                            <span>{lead.pax} Pax</span>
+                          </div>
+
+                          <p className="text-[9px] font-bold text-indigo-400 mt-1 flex items-center gap-1">
+                            <Calendar size={10} />
+                            {lead.startDate ? (
+                              <span className="font-black">
+                                {new Date(lead.startDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'numeric' })}
+                                {lead.endDate ? ` au ${new Date(lead.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'numeric' })}` : ''}
+                              </span>
+                            ) : (
+                              <span>{lead.eventDate ? new Date(lead.eventDate).toLocaleDateString() : 'Dates à définir'}</span>
+                            )}
+                          </p>
+
+                          {alerts.length > 0 && (
+                            <div className="flex gap-1 mt-3">
+                              {alerts.map((alert, idx) => (
+                                <div key={`${lead.id}-alert-${idx}`} className={`flex items-center gap-1 px-2 py-1 rounded text-[8px] font-black uppercase ${alert.color}`}>
+                                  <AlertTriangle size={10} /> {alert.label}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {processedLeads.length === 0 && (
+                      <div className="text-center py-10 text-slate-400 text-xs font-medium">Aucun dossier trouvé.</div>
+                    )}
+                  </>
+                ) : (
+                  <div className="h-full flex flex-col bg-white dark:bg-slate-900 rounded-b-[24px]">
+                    <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+                      <button
+                        onClick={() => setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+
+                      <span className="text-sm font-black uppercase">
+                        {calendarDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                      </span>
+
+                      <button
+                        onClick={() => setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800 text-[10px] font-black text-slate-400 text-center py-2">
+                      {['L', 'Ma', 'Me', 'J', 'V', 'S', 'D'].map(d => <div key={`dow-${d}`}>{d}</div>)}
+                    </div>
+
+                    <div className="flex-1 grid grid-cols-7 auto-rows-fr overflow-y-auto">
+                      {calendarData.map((date, i) => {
+                        const year = calendarDate.getFullYear();
+                        const month = calendarDate.getMonth();
+
+                        if (!date) {
+                          return (
+                            <div
+                              key={`pad-${year}-${month}-${i}`}
+                              className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-r border-slate-100 dark:border-slate-800"
+                            />
+                          );
+                        }
+
+                        const daysLeads = getLeadsForDate(date);
+                        const isToday = date.toDateString() === new Date().toDateString();
+                        const cellKey = `day-${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
+                        return (
+                          <div
+                            key={cellKey}
+                            className={`min-h-[80px] p-1 border-b border-r border-slate-100 dark:border-slate-800 relative ${isToday ? 'bg-indigo-50/30' : ''}`}
+                          >
+                            <span className={`text-[10px] font-bold block mb-1 ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
+                              {date.getDate()}
+                            </span>
+
+                            <div className="space-y-1">
+                              {daysLeads.map(l => (
+                                <div
+                                  key={l.id}
+                                  onClick={() => { setSelectedLead(l); setPipelineViewMode('list'); }}
+                                  className={`text-[8px] font-bold px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80 transition-opacity text-white ${
+                                    l.status === 'valide' ? 'bg-emerald-500' :
+                                    l.status === 'en_cours' ? 'bg-amber-400' :
+                                    l.status === 'nouveau' ? 'bg-blue-400' : 'bg-slate-400'
+                                  }`}
+                                  title={l.groupName}
+                                >
+                                  {l.groupName}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Detail */}
+            <div className={`flex-1 rounded-[32px] border overflow-hidden flex flex-col ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
+              {selectedLead ? (
+                <div className="flex flex-col h-full">
+                  <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                        Dossier #{String(selectedLead.id).split('-')[1] || selectedLead.id}
+                      </span>
+                      <h2 className="text-3xl font-black mt-1">{selectedLead.groupName}</h2>
+
+                      <div className="grid grid-cols-2 gap-4 mt-3 bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Arrivée</label>
+                          <input
+                            type="date"
+                            className="w-full bg-transparent font-bold text-xs outline-none text-slate-700 dark:text-slate-200"
+                            value={toDateInputValue(selectedLead.startDate || selectedLead.eventDate)}
+                            onChange={(e) => handleUpdateLead({ ...selectedLead, startDate: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Départ</label>
+                          <input
+                            type="date"
+                            className="w-full bg-transparent font-bold text-xs outline-none text-slate-700 dark:text-slate-200"
+                            value={toDateInputValue(selectedLead.endDate)}
+                            onChange={(e) => handleUpdateLead({ ...selectedLead, endDate: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 mt-2">
+                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                          <User size={14} /> {selectedLead.contactName}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="bg-slate-100 dark:bg-slate-900 rounded-xl p-1 flex">
+                        <select
+                          value={selectedLead.status}
+                          onChange={(e) => handleUpdateLead({ ...selectedLead, status: e.target.value as LeadStatus })}
+                          className="bg-transparent text-xs font-bold uppercase outline-none px-2 py-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <option value="nouveau">Nouveau</option>
+                          <option value="en_cours">En cours</option>
+                          <option value="valide" disabled={!canValidate(selectedLead)}>Validé (Checklist Requise)</option>
+                          <option value="perdu">Perdu</option>
+                        </select>
+                      </div>
+
+                      <select
+                        value={selectedLead.ownerId || ''}
+                        onChange={(e) => handleUpdateLead({ ...selectedLead, ownerId: e.target.value })}
+                        className="text-[10px] font-bold bg-transparent outline-none text-right text-indigo-500 cursor-pointer"
+                      >
+                        <option value="">Assigner responsable...</option>
+                        {users.map(u => <option key={u.uid} value={u.uid}>{u.displayName}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900">
+                        <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Email</p>
+                        <p className="font-bold text-sm">{selectedLead.email || '-'}</p>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900">
+                        <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Téléphone</p>
+                        <p className="font-bold text-sm">{selectedLead.phone || '-'}</p>
+                      </div>
+                    </div>
+
+                    <div className="p-6 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/30 dark:bg-indigo-900/10">
+                      <h4 className="text-sm font-black uppercase text-indigo-900 dark:text-indigo-200 mb-4 flex items-center gap-2">
+                        <CheckSquare size={16} /> Checklist Validation
+                      </h4>
+
+                      <div className="space-y-3">
+                        {[
+                          { key: 'roomSetup', label: 'Disposition de salle validée' },
+                          { key: 'menu', label: 'Menu F&B validé' },
+                          { key: 'roomingList', label: 'Rooming List reçue' },
+                        ].map(item => (
+                          <label key={`chk-${item.key}`} className="flex items-center gap-3 cursor-pointer group">
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                              selectedLead.checklist[item.key as keyof typeof selectedLead.checklist] ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white dark:bg-slate-800'
+                            }`}>
+                              {selectedLead.checklist[item.key as keyof typeof selectedLead.checklist] && <CheckCircle2 size={14} className="text-white" />}
+                            </div>
+
+                            <input
+                              type="checkbox"
+                              checked={selectedLead.checklist[item.key as keyof typeof selectedLead.checklist]}
+                              onChange={(e) => handleUpdateLead({
+                                ...selectedLead,
+                                checklist: { ...selectedLead.checklist, [item.key]: e.target.checked }
+                              })}
+                              className="hidden"
+                            />
+
+                            <span className={`text-sm font-bold ${
+                              selectedLead.checklist[item.key as keyof typeof selectedLead.checklist] ? 'text-indigo-900 dark:text-indigo-200' : 'text-slate-500'
+                            }`}>
+                              {item.label}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+
+                      {!canValidate(selectedLead) && selectedLead.status !== 'perdu' && (
+                        <p className="text-[10px] text-amber-600 font-bold mt-4 flex items-center gap-1">
+                          <AlertTriangle size={12} /> Complétez la checklist pour passer en statut "Validé".
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-black uppercase text-slate-400 ml-1">Notes / Historique</h4>
+                      <textarea
+                        className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 outline-none font-medium text-sm min-h-[150px]"
+                        value={selectedLead.note}
+                        onChange={(e) => handleUpdateLead({ ...selectedLead, note: e.target.value })}
+                        placeholder="Notes internes..."
+                      />
+                    </div>
+
+                    <div className="pt-4 flex justify-end">
+                      <button
+                        onClick={() => handleDeleteLead(selectedLead.id)}
+                        className="text-red-400 hover:text-red-600 text-xs font-bold uppercase flex items-center gap-2"
+                      >
+                        <XCircle size={14} /> Supprimer le lead
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center opacity-30">
+                  <Briefcase size={64} className="mb-4 text-slate-400" />
+                  <p className="text-xl font-black text-slate-500">Sélectionnez un dossier</p>
+                </div>
+              )}
             </div>
           </>
         )}
 
-        {/* -------------------- INBOX (Saisie rapide corrigée) -------------------- */}
+        {/* INBOX */}
         {activeTab === 'inbox' && (
           <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6 w-full">
-
-            {/* Left form */}
             <div className={`w-full md:w-1/3 flex flex-col rounded-[32px] border overflow-hidden p-6 space-y-4 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
               <h3 className="text-lg font-black uppercase tracking-tight">Saisie Rapide</h3>
 
               <div className="space-y-3">
-
-                {/* ✅ Contact picker (APPLICATION) */}
+                {/* Contact picker (application contacts) */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
                   <select
@@ -996,8 +1258,16 @@ const handleDeleteLead = (id: string | number) => {
                     onChange={(e) => {
                       const id = e.target.value;
                       setSelectedInboxVipId(id);
-                      const c = (appContacts || []).find(x => getContactId(x) === String(id)) || null;
-                      prefillFromAppContact(c, 'inbox');
+                      const c = (appContacts || []).find(x => getContactId(x) === String(id));
+                      if (c) {
+                        setInboxForm(prev => ({
+                          ...prev,
+                          contactName: prev.contactName || getContactName(c),
+                          companyName: prev.companyName || getContactCompany(c),
+                          email: prev.email || getContactEmail(c),
+                          phone: prev.phone || getContactPhone(c),
+                        }));
+                      }
                     }}
                     className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none"
                   >
@@ -1013,7 +1283,7 @@ const handleDeleteLead = (id: string | number) => {
                     <button
                       type="button"
                       onClick={() => {
-                        const phone = (selectedInboxVip ? getContactPhone(selectedInboxVip) : '') || inboxForm.phone;
+                        const phone = getContactPhone(selectedInboxVip) || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
                           contactName: inboxForm.contactName,
@@ -1035,7 +1305,7 @@ const handleDeleteLead = (id: string | number) => {
                     <button
                       type="button"
                       onClick={() => {
-                        const phone = (selectedInboxVip ? getContactPhone(selectedInboxVip) : '') || inboxForm.phone;
+                        const phone = getContactPhone(selectedInboxVip) || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
                           contactName: inboxForm.contactName,
@@ -1057,39 +1327,6 @@ const handleDeleteLead = (id: string | number) => {
                   </div>
                 </div>
 
-                {/* ✅ Client picker (GROUPES / CRM) */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Client (Groupes / CRM)</label>
-                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2">
-                    <Search size={14} className="text-slate-400" />
-                    <input
-                      value={clientSearchInbox}
-                      onChange={(e) => setClientSearchInbox(e.target.value)}
-                      placeholder="Rechercher client groupe..."
-                      className="bg-transparent outline-none w-full text-xs font-bold"
-                    />
-                  </div>
-
-                  <select
-                    value={selectedGroupClientInboxId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedGroupClientInboxId(id);
-                      const c = filteredGroupClientsInbox.find(x => getClientId(x) === String(id)) || null;
-                      prefillFromGroupClient(c, 'inbox');
-                    }}
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none"
-                  >
-                    <option value="">— Sélectionner —</option>
-                    {filteredGroupClientsInbox.map(c => (
-                      <option key={getClientId(c)} value={getClientId(c)}>
-                        {getClientCompany(c)}{getClientEmail(c) ? ` • ${getClientEmail(c)}` : ''}{getClientPhone(c) ? ` • ${getClientPhone(c)}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Fields */}
                 <input
                   type="text"
                   placeholder="Nom Contact *"
@@ -1140,6 +1377,7 @@ const handleDeleteLead = (id: string | number) => {
                   </div>
                 </div>
 
+                {/* Rooms in Inbox */}
                 <RoomsInputs
                   compact
                   value={inboxForm.rooms}
@@ -1177,37 +1415,225 @@ const handleDeleteLead = (id: string | number) => {
               </div>
             </div>
 
-            {/* Right list: garde ta partie existante */}
+            {/* Right list */}
             <div className="flex-1 flex flex-col h-full overflow-hidden">
-              {/* 👉 Ici tu peux recoller ta toolbar + liste processedInbox inchangées */}
-              <div className={`p-6 rounded-[32px] border ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
-                <p className="text-sm font-bold opacity-60">
-                  ✅ La liste Inbox (tri / filtres / actions) peut rester inchangée. Garde ton code existant ici.
-                </p>
+              {/* ✅ INBOX TOOLBAR: search + filter + sort */}
+              <div className={`rounded-[24px] border p-4 mb-4 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
+                <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                  <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border border-transparent focus-within:border-indigo-500 transition-colors">
+                    <Search size={16} className="text-slate-400 mr-2" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher (nom, entreprise, email, téléphone)..."
+                      value={inboxSearch}
+                      onChange={(e) => setInboxSearch(e.target.value)}
+                      className="bg-transparent outline-none w-full text-xs font-bold"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border border-transparent">
+                      <ArrowDownUp size={14} className="text-slate-400 mr-2" />
+                      <select
+                        value={inboxSort}
+                        onChange={(e) => setInboxSort(e.target.value as any)}
+                        className="bg-transparent outline-none text-xs font-bold appearance-none cursor-pointer"
+                      >
+                        <option value="date_desc">🆕 Récent → Ancien</option>
+                        <option value="date_asc">📆 Ancien → Récent</option>
+                        <option value="urgency">🚨 Urgence (+48h)</option>
+                        <option value="event_date">📅 Date événement</option>
+                        <option value="alpha">Abc Nom</option>
+                        <option value="company">🏢 Entreprise</option>
+                        <option value="source">🌐 Source</option>
+                        <option value="quote">🧾 Devis (à envoyer)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto no-scrollbar mt-3 pb-1">
+                  <button onClick={() => setInboxFilter('ALL')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'ALL' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>Tous</button>
+                  <button onClick={() => setInboxFilter('URGENT')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'URGENT' ? 'bg-orange-500 text-white border-orange-500' : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:text-orange-500'}`}>🚨 Urgent</button>
+                  <button onClick={() => setInboxFilter('THIS_MONTH')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'THIS_MONTH' ? 'bg-violet-500 text-white border-violet-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>📅 Ce mois</button>
+                  <button onClick={() => setInboxFilter('EMAIL')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'EMAIL' ? 'bg-blue-500 text-white border-blue-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>Email</button>
+                  <button onClick={() => setInboxFilter('PHONE')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'PHONE' ? 'bg-emerald-500 text-white border-emerald-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>Tél</button>
+                  <button onClick={() => setInboxFilter('WEB')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase whitespace-nowrap border transition-all ${inboxFilter === 'WEB' ? 'bg-purple-500 text-white border-purple-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>Web</button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pb-10">
+                {processedInbox.map(item => {
+                  const isAlert = checkIsOverdue(item);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-4 rounded-2xl border flex flex-col md:flex-row justify-between md:items-center bg-white dark:bg-slate-800 ${
+                        isAlert ? 'border-orange-300 bg-orange-50 dark:bg-orange-900/10' : 'border-slate-100 dark:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4 mb-3 md:mb-0">
+                        <div className={`p-3 rounded-xl ${
+                          item.source === 'email' ? 'bg-blue-50 text-blue-600' :
+                          item.source === 'phone' ? 'bg-emerald-50 text-emerald-600' :
+                          'bg-purple-50 text-purple-600'
+                        }`}>
+                          {item.source === 'email' ? <Mail size={18} /> : item.source === 'phone' ? <Phone size={18} /> : <Globe size={18} />}
+                        </div>
+
+                        <div>
+                          <h4 className="font-bold text-sm">
+                            {item.contactName}{' '}
+                            {item.companyName && <span className="text-slate-400 font-medium">({item.companyName})</span>}
+                          </h4>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
+                            Recu le {new Date(item.requestDate).toLocaleDateString()} à {new Date(item.requestDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+
+                          {item.eventStartDate && (
+                            <div className="flex items-center gap-1 mt-1.5 text-indigo-600 dark:text-indigo-400">
+                              <Calendar size={12} />
+                              <span className="text-[10px] font-black uppercase">
+                                {new Date(item.eventStartDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'numeric' })}
+                                {item.eventEndDate && ` au ${new Date(item.eventEndDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'numeric' })}`}
+                              </span>
+                            </div>
+                          )}
+
+                          {isAlert && (
+                            <span className="text-[9px] font-black text-orange-500 flex items-center gap-1 mt-1">
+                              <AlertTriangle size={10} /> Relance nécessaire (+48h)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 md:gap-6 justify-between md:justify-end w-full md:w-auto">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleToggleQuoteSent(item.id); }}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
+                            item.quoteSent
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className={`w-3 h-3 rounded flex items-center justify-center border transition-colors ${
+                            item.quoteSent ? 'bg-emerald-500 border-emerald-500' : 'bg-transparent border-slate-300'
+                          }`}>
+                            {item.quoteSent && <Check size={8} className="text-white" strokeWidth={4} />}
+                          </div>
+                          <span className={`text-[10px] uppercase tracking-wide ${item.quoteSent ? 'font-black' : 'font-bold'}`}>
+                            Devis envoyé
+                          </span>
+                        </button>
+
+                        <div className="text-right">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Dernière Relance</p>
+                          <input
+                            type="date"
+                            value={toDateInputValue(item.lastFollowUp)}
+                            onChange={(e) => {
+                              const iso = toISODateFromInput(e.target.value);
+                              if (iso) handleUpdateLastFollowUp(item.id, iso);
+                            }}
+                            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                          />
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleValidateRequest(item)}
+                            className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase shadow hover:bg-emerald-600 transition-colors flex items-center gap-1"
+                          >
+                            <CheckCircle2 size={12} /> Valider
+                          </button>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleArchiveRequest(item.id); }}
+                            className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                            title="Sans suite (Archiver)"
+                          >
+                            <XCircle size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {processedInbox.length === 0 && (
+                  <div className="text-center py-20 text-slate-400 font-medium">
+                    Aucune demande correspondant aux filtres.
+                  </div>
+                )}
               </div>
             </div>
-
           </div>
         )}
 
-        {/* -------------------- ARCHIVES (inchangé) -------------------- */}
+        {/* ARCHIVES */}
         {activeTab === 'archives' && (
-          <div className="w-full">
-            <div className="p-8 rounded-[32px] border bg-white dark:bg-slate-800 dark:border-slate-700">
-              <p className="text-sm font-bold opacity-60">
-                ✅ Archives inchangées (garde ton code existant ici).
-              </p>
+          <div className="w-full h-full flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-xl font-black">Historique des Demandes</h3>
+                <p className="text-xs text-slate-400 font-bold">Demandes traitées et archivées</p>
+              </div>
               <button
                 onClick={handleExportCSV}
-                className="mt-4 px-6 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700 transition-colors"
+                className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700 transition-colors"
               >
                 <Download size={16} /> Exporter Excel
               </button>
             </div>
+
+            <div className={`flex-1 rounded-[32px] border overflow-hidden ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
+              <div className="overflow-x-auto h-full">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+                    <tr>
+                      <th className="p-4 font-black uppercase text-xs text-slate-500 w-32">Date</th>
+                      <th className="p-4 font-black uppercase text-xs text-slate-500">Nom / Prospect</th>
+                      <th className="p-4 font-black uppercase text-xs text-slate-500">Entreprise</th>
+                      <th className="p-4 font-black uppercase text-xs text-slate-500 w-32 text-center">Statut Final</th>
+                      <th className="p-4 font-black uppercase text-xs text-slate-500">Note / Motif</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {sortedArchives.map(item => (
+                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                        <td className="p-4 font-bold text-slate-600 dark:text-slate-300">
+                          {new Date(item.requestDate).toLocaleDateString()}
+                        </td>
+                        <td className="p-4 font-bold text-slate-900 dark:text-white">{item.contactName}</td>
+                        <td className="p-4 text-slate-500">{item.companyName || '-'}</td>
+                        <td className="p-4 text-center">
+                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${
+                            item.status === 'processed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'
+                          }`}>
+                            {item.status === 'processed' ? 'Validé' : 'Non Abouti'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-slate-500 italic truncate max-w-xs">{item.note || '-'}</td>
+                      </tr>
+                    ))}
+
+                    {sortedArchives.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-400 italic">
+                          Aucune archive disponible.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* -------------------- CONTACTS (application only) -------------------- */}
+        {/* CONTACTS */}
         {activeTab === 'contacts' && (
           <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6 w-full">
             <div className={`w-full md:w-1/3 flex flex-col rounded-[32px] border overflow-hidden ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
@@ -1274,7 +1700,7 @@ const handleDeleteLead = (id: string | number) => {
                         <p className="text-sm font-bold">{getContactPhone(selectedContact) || '-'}</p>
                       </div>
                       <button
-                        onClick={() => handleDeleteAppContact(getContactId(selectedContact))}
+                        onClick={() => handleDeleteClient(getContactId(selectedContact))}
                         className="flex items-center gap-2 text-xs font-bold text-red-400 hover:text-red-600 transition-colors bg-red-50 dark:bg-red-900/10 px-3 py-1.5 rounded-lg uppercase"
                       >
                         <Trash2 size={14} /> Supprimer
@@ -1321,15 +1747,14 @@ const handleDeleteLead = (id: string | number) => {
           </div>
         )}
 
-        {/* -------------------- NEW LEAD (ajout client groupes) -------------------- */}
+        {/* NEW LEAD */}
         {activeTab === 'new_lead' && (
           <div className="w-full max-w-2xl mx-auto overflow-y-auto no-scrollbar py-6">
             <div className={`p-8 rounded-[32px] border shadow-sm space-y-6 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
               <h3 className="text-xl font-black uppercase tracking-tight">Nouvelle Demande Qualifiée</h3>
 
               <div className="space-y-4">
-
-                {/* ✅ Contact (Application) */}
+                {/* Contact picker (application contacts) + SMS/WhatsApp */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
                   <select
@@ -1337,8 +1762,15 @@ const handleDeleteLead = (id: string | number) => {
                     onChange={(e) => {
                       const id = e.target.value;
                       setSelectedVipId(id);
-                      const c = (appContacts || []).find(x => getContactId(x) === String(id)) || null;
-                      prefillFromAppContact(c, 'lead');
+                      const c = (appContacts || []).find(x => getContactId(x) === String(id));
+                      if (c) {
+                        setForm(prev => ({
+                          ...prev,
+                          contactName: prev.contactName || getContactName(c),
+                          email: prev.email || getContactEmail(c),
+                          phone: prev.phone || getContactPhone(c),
+                        }));
+                      }
                     }}
                     className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-sm"
                   >
@@ -1354,7 +1786,7 @@ const handleDeleteLead = (id: string | number) => {
                     <button
                       type="button"
                       onClick={() => {
-                        const phone = (selectedVip ? getContactPhone(selectedVip) : '') || form.phone || '';
+                        const phone = getContactPhone(selectedVip) || form.phone || '';
                         const msg = buildMessage({
                           groupName: form.groupName,
                           contactName: form.contactName,
@@ -1378,7 +1810,7 @@ const handleDeleteLead = (id: string | number) => {
                     <button
                       type="button"
                       onClick={() => {
-                        const phone = (selectedVip ? getContactPhone(selectedVip) : '') || form.phone || '';
+                        const phone = getContactPhone(selectedVip) || form.phone || '';
                         const msg = buildMessage({
                           groupName: form.groupName,
                           contactName: form.contactName,
@@ -1401,40 +1833,6 @@ const handleDeleteLead = (id: string | number) => {
                   </div>
                 </div>
 
-                {/* ✅ Client (Groupes / CRM) */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Client (Groupes / CRM)</label>
-
-                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 rounded-2xl px-4 py-3 border-2 border-transparent focus-within:border-indigo-500">
-                    <Search size={16} className="text-slate-400" />
-                    <input
-                      value={clientSearchLead}
-                      onChange={(e) => setClientSearchLead(e.target.value)}
-                      placeholder="Rechercher client groupe..."
-                      className="bg-transparent outline-none w-full text-sm font-bold"
-                    />
-                  </div>
-
-                  <select
-                    value={selectedGroupClientLeadId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedGroupClientLeadId(id);
-                      const c = filteredGroupClientsLead.find(x => getClientId(x) === String(id)) || null;
-                      prefillFromGroupClient(c, 'lead');
-                    }}
-                    className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-sm"
-                  >
-                    <option value="">— Sélectionner —</option>
-                    {filteredGroupClientsLead.map(c => (
-                      <option key={getClientId(c)} value={getClientId(c)}>
-                        {getClientCompany(c)}{getClientEmail(c) ? ` • ${getClientEmail(c)}` : ''}{getClientPhone(c) ? ` • ${getClientPhone(c)}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Form fields (inchangés) */}
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nom du Groupe / Événement *</label>
                   <input
@@ -1510,6 +1908,7 @@ const handleDeleteLead = (id: string | number) => {
                   </div>
                 </div>
 
+                {/* Rooms in New Lead */}
                 <RoomsInputs
                   value={form.rooms}
                   onChange={(next) => setForm(prev => ({ ...prev, rooms: next }))}
