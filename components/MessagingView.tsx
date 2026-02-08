@@ -4,7 +4,7 @@ import {
   Send, Plus, Search, Paperclip, MoreVertical, Hash, User, 
   CheckSquare, Smile, X, Image as ImageIcon, MessageSquare, 
   LogOut, Trash2, Info, FileImage, Shield, UserPlus, MinusCircle,
-  AlertTriangle, Loader2, RefreshCw, ArrowLeft, Download
+  AlertTriangle, Loader2, RefreshCw, ArrowLeft, Download, Maximize2
 } from 'lucide-react';
 
 interface MessagingViewProps {
@@ -47,6 +47,9 @@ const MessagingContent: React.FC<MessagingViewProps> = ({
   const [showOptionsDropdown, setShowOptionsDropdown] = useState(false);
   const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
   const [showMediaModal, setShowMediaModal] = useState(false);
+  
+  // ✅ NOUVEAU : État pour l'image en plein écran
+  const [viewingImage, setViewingImage] = useState<Attachment | null>(null);
 
   // New Channel Form
   const [newChannelName, setNewChannelName] = useState('');
@@ -307,7 +310,27 @@ const MessagingContent: React.FC<MessagingViewProps> = ({
                        <div className={`max-w-[75%] relative flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                           {!isMe && showAvatar && activeChannel.type === 'group' && <span className="text-[10px] text-slate-400 font-bold ml-1 mb-1">{msg.senderName}</span>}
                           <div className={`p-3 shadow-sm text-sm relative break-words ${isMe ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-700 rounded-2xl rounded-tl-sm'}`}>
-                             {msg.attachments && msg.attachments.length > 0 && <div className="mb-2 space-y-2">{msg.attachments.map(att => <div key={att.id} className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10 relative group/img">{att.type.startsWith('image/') ? <img src={att.url} alt="attachment" className="max-w-full h-auto object-cover max-h-60" /> : <div className="flex items-center gap-2 p-3 bg-slate-100 dark:bg-slate-700"><Paperclip size={16}/> <span className="text-xs font-bold truncate max-w-[150px]">{att.name}</span></div>}</div>)}</div>}
+                             {msg.attachments && msg.attachments.length > 0 && (
+                               <div className="mb-2 space-y-2">
+                                 {msg.attachments.map(att => (
+                                   <div key={att.id} className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10 relative group/img">
+                                     {att.type.startsWith('image/') ? (
+                                       // ✅ MODIFICATION ICI : Image cliquable
+                                       <div className="relative cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setViewingImage(att)}>
+                                          <img src={att.url} alt="attachment" className="max-w-full h-auto object-cover max-h-60" />
+                                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 bg-black/20 transition-opacity">
+                                             <Maximize2 className="text-white drop-shadow-md" size={24} />
+                                          </div>
+                                       </div>
+                                     ) : (
+                                       <div className="flex items-center gap-2 p-3 bg-slate-100 dark:bg-slate-700">
+                                          <Paperclip size={16}/> <span className="text-xs font-bold truncate max-w-[150px]">{att.name}</span>
+                                       </div>
+                                     )}
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
                              <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                           </div>
                           <div className={`flex items-center gap-2 mt-1 px-1 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -419,7 +442,7 @@ const MessagingContent: React.FC<MessagingViewProps> = ({
         </div>
       )}
 
-      {/* 3. Media Modal */}
+      {/* 3. Media Modal (Galerie du chat) */}
       {showMediaModal && activeChannel && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
            <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-2xl p-6 shadow-2xl flex flex-col h-[80vh]">
@@ -432,8 +455,16 @@ const MessagingContent: React.FC<MessagingViewProps> = ({
                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       {channelMedia.map(att => (
                         <div key={att.id} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 aspect-square bg-slate-50 dark:bg-slate-800">
-                           {att.type.startsWith('image/') ? <img src={att.url} alt={att.name} className="w-full h-full object-cover" /> : <div className="flex flex-col items-center justify-center h-full text-slate-400"><Paperclip size={32} /> <span className="text-xs font-bold mt-2 px-2 text-center truncate w-full">{att.name}</span></div>}
-                           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2"><a href={att.url} download={att.name} className="p-2 bg-white rounded-full text-indigo-600 hover:scale-110 transition-transform"><Download size={16}/></a></div>
+                           {att.type.startsWith('image/') ? (
+                             <div className="w-full h-full cursor-pointer" onClick={() => setViewingImage(att)}>
+                               <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+                             </div>
+                           ) : (
+                             <div className="flex flex-col items-center justify-center h-full text-slate-400"><Paperclip size={32} /> <span className="text-xs font-bold mt-2 px-2 text-center truncate w-full">{att.name}</span></div>
+                           )}
+                           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                             <a href={att.url} download={att.name} className="p-2 bg-white rounded-full text-indigo-600 hover:scale-110 transition-transform"><Download size={16}/></a>
+                           </div>
                         </div>
                       ))}
                    </div>
@@ -442,6 +473,36 @@ const MessagingContent: React.FC<MessagingViewProps> = ({
            </div>
         </div>
       )}
+
+      {/* ✅ 4. LIGHTBOX PLEIN ÉCRAN */}
+      {viewingImage && (
+        <div 
+          className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" 
+          onClick={() => setViewingImage(null)}
+        >
+          {/* Close Button Top Right */}
+          <button className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors z-50">
+             <X size={24} />
+          </button>
+
+          <div className="relative flex flex-col items-center gap-4 w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
+             <img 
+               src={viewingImage.url} 
+               alt={viewingImage.name} 
+               className="max-w-full max-h-[80vh] rounded-lg shadow-2xl object-contain"
+             />
+             <a 
+               href={viewingImage.url} 
+               download={viewingImage.name}
+               className="px-6 py-3 bg-white text-black rounded-full font-bold flex items-center gap-2 hover:scale-105 transition-transform shadow-lg"
+               onClick={(e) => e.stopPropagation()}
+             >
+               <Download size={20} /> Télécharger l'image
+             </a>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
