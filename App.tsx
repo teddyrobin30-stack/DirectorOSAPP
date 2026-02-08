@@ -124,6 +124,8 @@ const AuthenticatedApp: React.FC = () => {
   const [lostItems, setLostItems] = useState<LostItem[]>(() => JSON.parse(localStorage.getItem(STORAGE_KEYS.LOST_ITEMS) || JSON.stringify(INITIAL_LOST_ITEMS)));
   const [spaRequests, setSpaRequests] = useState<SpaRequest[]>(() => JSON.parse(localStorage.getItem(STORAGE_KEYS.SPA_REQUESTS) || JSON.stringify(INITIAL_SPA_REQUESTS)));
   const [groups, setGroups] = useState<Group[]>(() => JSON.parse(localStorage.getItem(STORAGE_KEYS.GROUPS) || JSON.stringify(INITIAL_GROUPS)));
+  
+  // Correction Agenda : Récupération correcte des dates
   const [events, setEvents] = useState<CalendarEvent[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.EVENTS);
     if (saved) {
@@ -134,8 +136,6 @@ const AuthenticatedApp: React.FC = () => {
   });
   
   const [channels, setChannels] = useState<ChatChannel[]>(() => JSON.parse(localStorage.getItem(STORAGE_KEYS.CHANNELS) || JSON.stringify(INITIAL_CHANNELS)));
-  
-  // ÉTAT POUR STOCKER TOUS LES UTILISATEURS
   const [allUsers, setAllUsers] = useState<any[]>([]);
 
   const [userSettings, setUserSettings] = useState<UserSettings>(() => {
@@ -198,16 +198,22 @@ const AuthenticatedApp: React.FC = () => {
     }));
     unsubs.push(subscribeToSharedCollection(DB_COLLECTIONS.SPA, (data) => setSpaRequests(data as SpaRequest[])));
 
-    // 2. ABONNEMENT MESSAGERIE & UTILISATEURS
+    // 2. MESSAGERIE & USERS
     unsubs.push(subscribeToSharedCollection('conversations', (data) => setChannels(data as ChatChannel[])));
     unsubs.push(subscribeToSharedCollection('users', (data) => setAllUsers(data)));
 
-    // 3. ESPACES PRIVÉS
+    // 3. ESPACES PRIVÉS (Agenda & Tâches)
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.TASKS, user.uid, (data) => setTodos(data as Task[])));
+    
+    // Correction Agenda Subscription: Conversion correcte des dates Firestore
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.AGENDA, user.uid, (data) => {
-        const evts = data.map((e: any) => ({ ...e, start: new Date(e.start.seconds ? e.start.seconds * 1000 : e.start) }));
+        const evts = data.map((e: any) => ({ 
+          ...e, 
+          start: new Date(e.start.seconds ? e.start.seconds * 1000 : e.start) 
+        }));
         setEvents(evts as CalendarEvent[]);
     }));
+    
     unsubs.push(subscribeToUserCollection(DB_COLLECTIONS.CONTACTS, user.uid, (data) => setContacts(data as Contact[])));
 
     return () => {
@@ -301,13 +307,12 @@ const AuthenticatedApp: React.FC = () => {
     }
   };
 
-  // CORRECTION TÂCHES : Logique Messagerie et SMS
+  // TÂCHES + SMS + MESSAGERIE
   const handleSaveTask = (task: Task, options?: { sendSms?: boolean, shareInChat?: boolean }) => {
-    // 1. Sauvegarde de la tâche
     const secureTask = { ...task, ownerId: user?.uid }; 
     saveDocument(DB_COLLECTIONS.TASKS, secureTask);
     
-    // 2. Logique Messagerie
+    // Messagerie Auto
     if (options?.shareInChat && task.linkedGroupId) {
       const channel = channels.find(c => c.id === task.linkedGroupId);
       if (channel) {
@@ -323,23 +328,14 @@ const AuthenticatedApp: React.FC = () => {
       }
     }
 
-    // 3. Logique SMS RÉELLE (Correction ID)
+    // SMS Auto (Native)
     if (options?.sendSms && task.linkedContactId) {
-       // 🚨 CORRECTION ICI : On convertit tout en String pour être sûr de trouver le contact
        const contact = contacts.find(c => String(c.id) === String(task.linkedContactId));
-       
        if (contact && contact.phone) {
-         // Crée le message
          const body = `HotelOS: Tâche pour ${contact.name}.\n${task.text}\nPour le: ${task.dueDate || 'ASAP'}`;
-         
-         // Encode pour l'URL
-         const encodedBody = encodeURIComponent(body);
-         
-         // Ouvre l'application SMS native
-         window.location.href = `sms:${contact.phone}?&body=${encodedBody}`;
+         window.location.href = `sms:${contact.phone}?body=${encodeURIComponent(body)}`;
        } else {
-         console.log("Contact introuvable ou pas de téléphone", task.linkedContactId, contact);
-         alert("Erreur : Impossible de récupérer le numéro de téléphone de ce contact.");
+         alert("Ce contact n'a pas de numéro de téléphone enregistré.");
        }
     }
 
@@ -362,10 +358,12 @@ const AuthenticatedApp: React.FC = () => {
     if (selectedGroupDetail?.id === group.id) setSelectedGroupDetail(group);
   };
 
+  // ✅ CORRECTION AGENDA : On ferme le modal après sauvegarde
   const handleSaveEvent = (event: CalendarEvent) => {
     const secureEvent = { ...event, ownerId: user?.uid };
     saveDocument(DB_COLLECTIONS.AGENDA, secureEvent);
     setEditEvent(null);
+    setShowEventModal(false); // <--- LIGNE AJOUTÉE POUR FERMER LE MODAL
   };
 
   const handleDeleteEvent = (id: number | string) => {
@@ -555,7 +553,6 @@ const AuthenticatedApp: React.FC = () => {
                 onSaveChannel={handleSaveChannel}
                 onDeleteChannel={handleDeleteChannel}
                 onSendMessage={handleSendMessage}
-                
                 users={allUsers} 
                 contacts={contacts} 
                 userSettings={userSettings} 
