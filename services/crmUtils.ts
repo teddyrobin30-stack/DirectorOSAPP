@@ -11,7 +11,7 @@ export const safeDate = (date: any) => {
 
 export const defaultRooms = (): Rooms => ({ single: 0, twin: 0, double: 0, family: 0 });
 
-/* -------------------- LOGIQUE TELEPHONE & MESSAGERIE (RESTAUREE) -------------------- */
+/* -------------------- LOGIQUE TELEPHONE & MESSAGERIE -------------------- */
 const normalizePhone = (phone: string) => (phone || '').replace(/[^\d+]/g, '');
 
 // Format E164 FR (+33...)

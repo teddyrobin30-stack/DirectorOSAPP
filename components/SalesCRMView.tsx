@@ -84,7 +84,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
   // HOOKS
   const { processedLeads, state: pipelineState } = useCrmPipeline(leads);
-  // ✅ Note: Assure-toi d'avoir créé le fichier useCrmInbox.ts comme indiqué dans l'étape 1
   const { processedInbox, state: inboxState } = useCrmInbox(inbox);
 
   // UI STATE
@@ -94,12 +93,36 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   const [pipelineViewMode, setPipelineViewMode] = useState<'list' | 'calendar'>('list');
   const [calendarDate, setCalendarDate] = useState(() => new Date());
 
+  // --- LOGIQUE CALENDRIER RESTAUREE ---
+  const calendarData = useMemo(() => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const days: (Date | null)[] = [];
+    
+    let startDay = firstDay.getDay(); // 0=Sun
+    startDay = startDay === 0 ? 6 : startDay - 1; // Mon=0
+    
+    for (let i = 0; i < startDay; i++) days.push(null);
+    for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
+    return days;
+  }, [calendarDate]);
+
+  const getLeadsForDate = (date: Date) => {
+    return processedLeads.filter(l => {
+      if (!l.startDate) return false;
+      const start = new Date(l.startDate);
+      const end = l.endDate ? new Date(l.endDate) : new Date(start);
+      const check = new Date(date);
+      check.setHours(0,0,0,0); start.setHours(0,0,0,0); end.setHours(0,0,0,0);
+      return check >= start && check <= end;
+    });
+  };
+
   // Normalisation Contacts
   const appContacts = useMemo(() => Array.isArray(contacts) ? contacts : clients, [contacts, clients]);
   
-  // Utilisation sécurisée de onUpdateClients via updateAppContacts si besoin
-  const updateAppContacts = (next: any[]) => onUpdateContacts ? onUpdateContacts(next) : onUpdateClients?.(next);
-
   // Forms
   const [form, setForm] = useState<any>({ groupName: '', contactName: '', email: '', phone: '', pax: 0, note: '', startDate: '', endDate: '', rooms: defaultRooms() });
   const [inboxForm, setInboxForm] = useState<any>({ contactName: '', companyName: '', email: '', phone: '', source: 'email', eventStartDate: '', eventEndDate: '', note: '', rooms: defaultRooms() });
@@ -138,6 +161,24 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     onUpdateInbox?.(inbox.map(i => i.id === id ? { ...i, status: 'archived' } : i));
     setToastMessage('Demande archivée');
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Date', 'Contact', 'Email', 'Tel', 'Statut', 'Note'];
+    const rows = (inbox || []).map(i => [
+      new Date(i.requestDate).toLocaleDateString(),
+      `"${i.contactName}"`,
+      i.email,
+      i.phone,
+      i.status,
+      `"${(i.note || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `crm_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
   };
 
   return (
@@ -228,7 +269,35 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     </div>
                   ))
                 ) : (
-                  <div className="p-4 text-center text-xs text-slate-400">Vue Calendrier (WIP)</div>
+                  <div className="h-full flex flex-col bg-white dark:bg-slate-900 rounded-b-[24px]">
+                    <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+                      <button onClick={() => setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"><ChevronLeft size={16} /></button>
+                      <span className="text-sm font-black uppercase">{calendarDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</span>
+                      <button onClick={() => setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"><ChevronRight size={16} /></button>
+                    </div>
+                    <div className="grid grid-cols-7 border-b text-[10px] font-black text-slate-400 text-center py-2">
+                      {['L', 'Ma', 'Me', 'J', 'V', 'S', 'D'].map(d => <div key={d}>{d}</div>)}
+                    </div>
+                    <div className="flex-1 grid grid-cols-7 auto-rows-fr overflow-y-auto">
+                      {calendarData.map((date, i) => {
+                        if (!date) return <div key={i} className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-r" />;
+                        const leads = getLeadsForDate(date);
+                        const isToday = date.toDateString() === new Date().toDateString();
+                        return (
+                          <div key={i} className={`min-h-[80px] p-1 border-b border-r relative ${isToday ? 'bg-indigo-50/30' : ''}`}>
+                            <span className={`text-[10px] font-bold block mb-1 ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>{date.getDate()}</span>
+                            <div className="space-y-1">
+                              {leads.map(l => (
+                                <div key={l.id} onClick={() => { setSelectedLead(l); setPipelineViewMode('list'); }} className={`text-[8px] font-bold px-1 py-0.5 rounded truncate cursor-pointer text-white ${l.status === 'valide' ? 'bg-emerald-500' : l.status === 'perdu' ? 'bg-slate-400' : 'bg-blue-400'}`}>
+                                  {l.groupName}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -336,6 +405,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                         {checkIsOverdue(item) && <span className="text-[9px] font-black text-orange-500 flex items-center gap-1 mt-1"><AlertTriangle size={10} /> Relance (+48h)</span>}
                       </div>
                     </div>
+                    {/* BOUTONS ACTIONS RAPIDES INBOX */}
+                    <div className="flex gap-2 mr-4">
+                      <button onClick={() => openSMS(item.phone, buildMessage({ contactName: item.contactName, sourceLabel: 'Inbox' }))} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600" title="SMS"><Briefcase size={14} /></button>
+                      <button onClick={() => openWhatsApp(item.phone, buildMessage({ contactName: item.contactName, sourceLabel: 'Inbox' }))} className="p-2 bg-emerald-100 hover:bg-emerald-200 rounded-lg text-emerald-600" title="WhatsApp"><Phone size={14} /></button>
+                    </div>
                     <div className="flex gap-2">
                       <button onClick={() => handleValidateRequest(item)} className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase shadow hover:bg-emerald-600 transition-colors">Valider</button>
                       <button onClick={() => handleArchiveRequest(item.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><XCircle size={18} /></button>
@@ -349,7 +423,20 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
         {/* --- AUTRES VUES --- */}
         {activeTab === 'contacts' && <div className="p-8 text-center text-slate-400 font-bold">Gestion des contacts synchronisée. Utilisez la vue "VIP" pour l'édition complète.</div>}
-        {activeTab === 'archives' && <div className="p-8 text-center text-slate-400 font-bold">Historique archivé disponible via l'export Excel.</div>}
+        
+        {activeTab === 'archives' && (
+          <div className="w-full h-full flex flex-col p-6">
+             <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black">Historique & Archives</h3>
+                <button onClick={handleExportCSV} className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700">
+                  <Download size={16} /> Exporter Excel
+                </button>
+             </div>
+             <div className="flex-1 rounded-[32px] border bg-white dark:bg-slate-800 p-4 overflow-auto flex items-center justify-center">
+                <p className="text-center text-slate-400">Consultez l'export Excel pour le détail complet.</p>
+             </div>
+          </div>
+        )}
 
         {/* --- FORMULAIRE NOUVEAU LEAD --- */}
         {activeTab === 'new_lead' && (
@@ -357,7 +444,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
             <div className={`p-8 rounded-[40px] border shadow-sm space-y-6 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
               <h3 className="text-2xl font-black uppercase tracking-tight">Qualifier une demande</h3>
               
-              {/* ✅ AJOUT: BOUTONS SMS / WHATSAPP */}
+              {/* BOUTONS SMS / WHATSAPP */}
               <div className="space-y-4">
                 <div className="flex gap-2 pb-4">
                   <button
