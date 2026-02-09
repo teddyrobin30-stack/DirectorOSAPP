@@ -20,7 +20,7 @@ export const useCrmPipeline = (leads: Lead[]) => {
       );
     }
 
-    // 2. Filtres dynamiques
+    // 2. Filtres
     if (filter !== 'ALL') {
       const now = new Date();
       if (['nouveau', 'en_cours', 'valide', 'perdu'].includes(filter)) {
@@ -49,16 +49,18 @@ export const useCrmPipeline = (leads: Lead[]) => {
     // 3. Tris
     items.sort((a, b) => {
       switch (sort) {
-        case 'event_asc':
+        case 'event_asc': 
           const da = safeDate(a.startDate || a.eventDate);
           const db = safeDate(b.startDate || b.eventDate);
-          return (!da ? 1 : !db ? -1 : da - db);
+          if (!da) return 1;
+          if (!db) return -1;
+          return da - db;
+        case 'urgency': 
+          return checkAlerts(b).length - checkAlerts(a).length;
         case 'created_desc':
           return safeDate(b.requestDate) - safeDate(a.requestDate);
         case 'alpha':
           return safeLower(a.groupName).localeCompare(safeLower(b.groupName), 'fr');
-        case 'urgency':
-          return checkAlerts(b).length - checkAlerts(a).length;
         default: return 0;
       }
     });

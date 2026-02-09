@@ -10,18 +10,18 @@ import {
 // TYPES
 import {
   Lead, UserSettings, UserProfile, LeadStatus,
-  InboxItem, Client, InboxSource, Contact
+  InboxItem, Client, InboxSource, Contact, Rooms
 } from '../types';
 
-// HOOKS & SERVICES (Mise à jour stratégique)
+// HOOKS & SERVICES
 import { useCrmPipeline } from '../hooks/useCrmPipeline';
 import { useCrmInbox } from '../hooks/useCrmInbox';
 import { 
-  safeLower, safeDate, checkIsOverdue, checkAlerts, canValidateLead 
+  safeLower, safeDate, checkIsOverdue, checkAlerts, canValidateLead,
+  buildMessage, openSMS, openWhatsApp, defaultRooms
 } from '../services/crmUtils';
 
 /* -------------------- HELPERS UI LOCAUX -------------------- */
-// On garde ici les helpers strictement liés à l'affichage des inputs
 const uid = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const toDateInputValue = (v?: string) => {
@@ -32,19 +32,7 @@ const toDateInputValue = (v?: string) => {
   return d.toISOString().split('T')[0];
 };
 
-/* -------------------- LOGIQUE MESSAGERIE -------------------- */
-const normalizePhone = (phone: string) => (phone || '').replace(/[^\d+]/g, '');
-const toE164FR = (raw: string) => {
-  const p = normalizePhone(raw);
-  if (!p) return '';
-  if (p.startsWith('+33')) return p;
-  if (/^0\d{9}$/.test(p)) return `+33${p.slice(1)}`;
-  return p.startsWith('+') ? p : `+${p}`;
-};
-
 /* -------------------- COMPOSANTS INTERNES -------------------- */
-type Rooms = { single: number; twin: number; double: number; family: number };
-const defaultRooms = (): Rooms => ({ single: 0, twin: 0, double: 0, family: 0 });
 
 const RoomsInputs: React.FC<{ value: Rooms; onChange: (next: Rooms) => void; compact?: boolean }> = ({ value, onChange, compact }) => {
   const inputClass = compact ? 'w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold' : 'w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm';
@@ -80,29 +68,43 @@ interface SalesCRMViewProps {
 }
 
 const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
-  const { userSettings, leads, onUpdateLeads, inbox = [], onUpdateInbox, contacts, onUpdateContacts, clients = [], users, onNavigate } = props;
+  const { 
+    userSettings, 
+    leads, 
+    onUpdateLeads, 
+    inbox = [], 
+    onUpdateInbox, 
+    contacts, 
+    onUpdateContacts, 
+    clients = [], 
+    onUpdateClients,
+    users, 
+    onNavigate 
+  } = props;
 
-  // ✅ 1. UTILISATION DES NOUVEAUX HOOKS
+  // HOOKS
   const { processedLeads, state: pipelineState } = useCrmPipeline(leads);
+  // ✅ Note: Assure-toi d'avoir créé le fichier useCrmInbox.ts comme indiqué dans l'étape 1
   const { processedInbox, state: inboxState } = useCrmInbox(inbox);
 
-  // ✅ 2. ÉTAT UI ET SELECTIONS
+  // UI STATE
   const [activeTab, setActiveTab] = useState<'pipeline' | 'inbox' | 'contacts' | 'new_lead' | 'archives'>('pipeline');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [selectedContactId, setSelectedContactId] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pipelineViewMode, setPipelineViewMode] = useState<'list' | 'calendar'>('list');
   const [calendarDate, setCalendarDate] = useState(() => new Date());
 
-  // Normalisation des contacts (Legacy vs New)
+  // Normalisation Contacts
   const appContacts = useMemo(() => Array.isArray(contacts) ? contacts : clients, [contacts, clients]);
+  
+  // Utilisation sécurisée de onUpdateClients via updateAppContacts si besoin
   const updateAppContacts = (next: any[]) => onUpdateContacts ? onUpdateContacts(next) : onUpdateClients?.(next);
 
-  // Formulaires
+  // Forms
   const [form, setForm] = useState<any>({ groupName: '', contactName: '', email: '', phone: '', pax: 0, note: '', startDate: '', endDate: '', rooms: defaultRooms() });
   const [inboxForm, setInboxForm] = useState<any>({ contactName: '', companyName: '', email: '', phone: '', source: 'email', eventStartDate: '', eventEndDate: '', note: '', rooms: defaultRooms() });
 
-  /* -------------------- HANDLERS ACTION -------------------- */
+  // ACTIONS
   const handleCreateLead = () => {
     if (!form.groupName || !form.contactName) return;
     const newLead: Lead = { ...form, id: uid('lead'), requestDate: new Date().toISOString(), status: 'nouveau', checklist: { roomSetup: false, menu: false, roomingList: false }, ownerId: '' };
@@ -117,7 +119,17 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   };
 
   const handleValidateRequest = (item: InboxItem) => {
-    setForm({ groupName: item.companyName ? `Groupe ${item.companyName}` : `Event ${item.contactName}`, contactName: item.contactName, email: item.email, phone: item.phone, startDate: item.eventStartDate || '', endDate: item.eventEndDate || '', note: `Source: ${item.source.toUpperCase()}.`, rooms: (item as any).rooms || defaultRooms(), pax: 0 });
+    setForm({ 
+      groupName: item.companyName ? `Groupe ${item.companyName}` : `Event ${item.contactName}`, 
+      contactName: item.contactName, 
+      email: item.email, 
+      phone: item.phone, 
+      startDate: item.eventStartDate || '', 
+      endDate: item.eventEndDate || '', 
+      note: `Source: ${item.source.toUpperCase()}.`, 
+      rooms: (item as any).rooms || defaultRooms(), 
+      pax: 0 
+    });
     onUpdateInbox?.(inbox.map(i => i.id === item.id ? { ...i, status: 'processed' } : i));
     setActiveTab('new_lead');
   };
@@ -128,20 +140,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  /* -------------------- CALENDRIER -------------------- */
-  const calendarDays = useMemo(() => {
-    const year = calendarDate.getFullYear();
-    const month = calendarDate.getMonth();
-    const days: (Date | null)[] = [];
-    const firstDay = new Date(year, month, 1).getDay();
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    const offset = firstDay === 0 ? 6 : firstDay - 1;
-    for (let i = 0; i < offset; i++) days.push(null);
-    for (let i = 1; i <= totalDays; i++) days.push(new Date(year, month, i));
-    return days;
-  }, [calendarDate]);
-
-  /* -------------------- RENDER -------------------- */
   return (
     <div className={`h-full flex flex-col overflow-hidden animate-in fade-in relative ${userSettings.darkMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'}`}>
       
@@ -230,12 +228,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     </div>
                   ))
                 ) : (
-                  <div className="p-4 text-center text-xs text-slate-400">Vue Calendrier active (voir volet central)</div>
+                  <div className="p-4 text-center text-xs text-slate-400">Vue Calendrier (WIP)</div>
                 )}
               </div>
             </div>
 
-            {/* DETAIL LEAD */}
             <div className={`flex-1 rounded-[32px] border overflow-hidden flex flex-col ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
               {selectedLead ? (
                 <div className="flex flex-col h-full p-8">
@@ -285,7 +282,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center opacity-30">
                   <Briefcase size={64} className="mb-4 text-slate-400" />
-                  <p className="text-xl font-black text-slate-500">Sélectionnez un dossier pour voir les détails</p>
+                  <p className="text-xl font-black text-slate-500">Sélectionnez un dossier</p>
                 </div>
               )}
             </div>
@@ -350,7 +347,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
           </div>
         )}
 
-        {/* --- AUTRES VUES (STUBS) --- */}
+        {/* --- AUTRES VUES --- */}
         {activeTab === 'contacts' && <div className="p-8 text-center text-slate-400 font-bold">Gestion des contacts synchronisée. Utilisez la vue "VIP" pour l'édition complète.</div>}
         {activeTab === 'archives' && <div className="p-8 text-center text-slate-400 font-bold">Historique archivé disponible via l'export Excel.</div>}
 
@@ -359,7 +356,54 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
           <div className="w-full max-w-2xl mx-auto overflow-y-auto no-scrollbar py-6">
             <div className={`p-8 rounded-[40px] border shadow-sm space-y-6 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
               <h3 className="text-2xl font-black uppercase tracking-tight">Qualifier une demande</h3>
+              
+              {/* ✅ AJOUT: BOUTONS SMS / WHATSAPP */}
               <div className="space-y-4">
+                <div className="flex gap-2 pb-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const msg = buildMessage({
+                        groupName: form.groupName,
+                        contactName: form.contactName,
+                        email: form.email,
+                        phone: form.phone,
+                        startDate: form.startDate,
+                        endDate: form.endDate,
+                        pax: form.pax,
+                        rooms: form.rooms,
+                        note: form.note,
+                        sourceLabel: 'Nouveau Lead'
+                      });
+                      openSMS(form.phone, msg);
+                    }}
+                    className="flex-1 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-black text-xs uppercase hover:bg-slate-100 transition-colors"
+                  >
+                    SMS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const msg = buildMessage({
+                        groupName: form.groupName,
+                        contactName: form.contactName,
+                        email: form.email,
+                        phone: form.phone,
+                        startDate: form.startDate,
+                        endDate: form.endDate,
+                        pax: form.pax,
+                        rooms: form.rooms,
+                        note: form.note,
+                        sourceLabel: 'Nouveau Lead'
+                      });
+                      openWhatsApp(form.phone, msg);
+                    }}
+                    className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-700 transition-colors"
+                  >
+                    WhatsApp
+                  </button>
+                </div>
+
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nom du Groupe *</label>
                   <input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" placeholder="Ex: Mariage Durand" value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })} />
