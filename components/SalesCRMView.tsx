@@ -93,7 +93,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   const [pipelineViewMode, setPipelineViewMode] = useState<'list' | 'calendar'>('list');
   const [calendarDate, setCalendarDate] = useState(() => new Date());
 
-  // --- LOGIQUE CALENDRIER RESTAUREE ---
+  // Gestion Selection Contact
+  const [selectedVipId, setSelectedVipId] = useState<string>(''); // Pour New Lead
+  const [selectedInboxVipId, setSelectedInboxVipId] = useState<string>(''); // Pour Inbox
+
+  // --- LOGIQUE CALENDRIER ---
   const calendarData = useMemo(() => {
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
@@ -120,9 +124,24 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     });
   };
 
-  // Normalisation Contacts
+  // Normalisation Contacts et Tri VIP
   const appContacts = useMemo(() => Array.isArray(contacts) ? contacts : clients, [contacts, clients]);
   
+  const vipCandidates = useMemo(() => {
+    const arr = [...(appContacts || [])];
+    arr.sort((a, b) => {
+      // Priorité aux VIPs
+      const isVipA = (a as any).vip ? 1 : 0;
+      const isVipB = (b as any).vip ? 1 : 0;
+      if (isVipA !== isVipB) return isVipB - isVipA;
+      return a.name.localeCompare(b.name);
+    });
+    return arr;
+  }, [appContacts]);
+  
+  // Utilisation sécurisée de onUpdateClients via updateAppContacts si besoin
+  const updateAppContacts = (next: any[]) => onUpdateContacts ? onUpdateContacts(next) : onUpdateClients?.(next);
+
   // Forms
   const [form, setForm] = useState<any>({ groupName: '', contactName: '', email: '', phone: '', pax: 0, note: '', startDate: '', endDate: '', rooms: defaultRooms() });
   const [inboxForm, setInboxForm] = useState<any>({ contactName: '', companyName: '', email: '', phone: '', source: 'email', eventStartDate: '', eventEndDate: '', note: '', rooms: defaultRooms() });
@@ -133,6 +152,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     const newLead: Lead = { ...form, id: uid('lead'), requestDate: new Date().toISOString(), status: 'nouveau', checklist: { roomSetup: false, menu: false, roomingList: false }, ownerId: '' };
     onUpdateLeads([newLead, ...leads]);
     setForm({ groupName: '', contactName: '', email: '', phone: '', pax: 0, note: '', startDate: '', endDate: '', rooms: defaultRooms() });
+    setSelectedVipId('');
     setActiveTab('pipeline');
   };
 
@@ -364,6 +384,81 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
             <div className={`w-full md:w-1/3 p-6 rounded-[32px] border overflow-y-auto ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
               <h3 className="text-lg font-black uppercase mb-4">Saisie Rapide</h3>
               <div className="space-y-4">
+                
+                {/* ✅ AJOUT: SÉLECTEUR DE CONTACT DANS L'INBOX */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
+                  <select 
+                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none"
+                    value={selectedInboxVipId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setSelectedInboxVipId(id);
+                      const c = appContacts.find((x: any) => String(x.id) === id);
+                      if (c) {
+                        setInboxForm({
+                          ...inboxForm,
+                          contactName: c.name,
+                          companyName: c.company || c.companyName || '',
+                          email: c.email || '',
+                          phone: c.phone || ''
+                        });
+                      }
+                    }}
+                  >
+                    <option value="">— Sélectionner —</option>
+                    {vipCandidates.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.company ? `• ${c.company}` : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* ✅ AJOUT: BOUTONS SMS/WHATSAPP DANS L'INBOX */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const msg = buildMessage({
+                          groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
+                          contactName: inboxForm.contactName,
+                          email: inboxForm.email,
+                          phone: inboxForm.phone,
+                          startDate: inboxForm.eventStartDate,
+                          endDate: inboxForm.eventEndDate,
+                          rooms: inboxForm.rooms,
+                          note: inboxForm.note,
+                          sourceLabel: 'Inbox'
+                        });
+                        openSMS(inboxForm.phone, msg);
+                      }}
+                      className="flex-1 py-2 rounded-lg border text-[10px] font-black uppercase hover:bg-slate-100 transition-colors"
+                    >
+                      SMS
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const msg = buildMessage({
+                          groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
+                          contactName: inboxForm.contactName,
+                          email: inboxForm.email,
+                          phone: inboxForm.phone,
+                          startDate: inboxForm.eventStartDate,
+                          endDate: inboxForm.eventEndDate,
+                          rooms: inboxForm.rooms,
+                          note: inboxForm.note,
+                          sourceLabel: 'Inbox'
+                        });
+                        openWhatsApp(inboxForm.phone, msg);
+                      }}
+                      className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase hover:bg-emerald-700 transition-colors"
+                    >
+                      WhatsApp
+                    </button>
+                  </div>
+                </div>
+
                 <input type="text" placeholder="Nom Contact *" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.contactName} onChange={(e) => setInboxForm({ ...inboxForm, contactName: e.target.value })} />
                 <input type="text" placeholder="Entreprise" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.companyName} onChange={(e) => setInboxForm({ ...inboxForm, companyName: e.target.value })} />
                 <input type="email" placeholder="Email" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.email} onChange={(e) => setInboxForm({ ...inboxForm, email: e.target.value })} />
@@ -377,7 +472,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button key={s} onClick={() => setInboxForm({ ...inboxForm, source: s })} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase border ${inboxForm.source === s ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>{s}</button>
                   ))}
                 </div>
-                <button onClick={() => { onUpdateInbox?.([ { ...inboxForm, id: uid('inbox'), status: 'to_process', requestDate: new Date().toISOString() }, ...inbox ]); setInboxForm({ contactName: '', companyName: '', email: '', phone: '', source: 'email', rooms: defaultRooms() }); }} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 transition-all">Enregistrer Demande</button>
+                <button onClick={() => { onUpdateInbox?.([ { ...inboxForm, id: uid('inbox'), status: 'to_process', requestDate: new Date().toISOString() }, ...inbox ]); setInboxForm({ contactName: '', companyName: '', email: '', phone: '', source: 'email', rooms: defaultRooms() }); setSelectedInboxVipId(''); }} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 transition-all">Enregistrer Demande</button>
               </div>
             </div>
 
@@ -446,6 +541,35 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
               
               {/* BOUTONS SMS / WHATSAPP */}
               <div className="space-y-4">
+                {/* SÉLECTEUR DE CONTACT */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
+                  <select 
+                    className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-sm"
+                    value={selectedVipId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setSelectedVipId(id);
+                      const c = appContacts.find((x: any) => String(x.id) === id);
+                      if (c) {
+                        setForm({
+                          ...form,
+                          contactName: c.name,
+                          email: c.email || '',
+                          phone: c.phone || ''
+                        });
+                      }
+                    }}
+                  >
+                    <option value="">— Sélectionner —</option>
+                    {vipCandidates.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.company ? `• ${c.company}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="flex gap-2 pb-4">
                   <button
                     type="button"
