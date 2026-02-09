@@ -138,6 +138,12 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     });
     return arr;
   }, [appContacts]);
+
+  // Récupération de l'objet Contact complet pour l'Inbox
+  const selectedInboxContact = useMemo(() => {
+    if (!selectedInboxVipId) return null;
+    return appContacts.find((x: any) => String(x.id) === selectedInboxVipId);
+  }, [selectedInboxVipId, appContacts]);
   
   // Utilisation sécurisée de onUpdateClients via updateAppContacts si besoin
   const updateAppContacts = (next: any[]) => onUpdateContacts ? onUpdateContacts(next) : onUpdateClients?.(next);
@@ -414,23 +420,25 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     ))}
                   </select>
 
-                  {/* ✅ AJOUT: BOUTONS SMS/WHATSAPP DANS L'INBOX */}
+                  {/* ✅ AJOUT: BOUTONS SMS/WHATSAPP DANS L'INBOX AVEC LOGIQUE BDD */}
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => {
+                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
+                        const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
                           contactName: inboxForm.contactName,
                           email: inboxForm.email,
-                          phone: inboxForm.phone,
+                          phone: targetPhone,
                           startDate: inboxForm.eventStartDate,
                           endDate: inboxForm.eventEndDate,
                           rooms: inboxForm.rooms,
                           note: inboxForm.note,
                           sourceLabel: 'Inbox'
                         });
-                        openSMS(inboxForm.phone, msg);
+                        openSMS(targetPhone, msg);
                       }}
                       className="flex-1 py-2 rounded-lg border text-[10px] font-black uppercase hover:bg-slate-100 transition-colors"
                     >
@@ -439,18 +447,20 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
+                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
+                        const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
                           contactName: inboxForm.contactName,
                           email: inboxForm.email,
-                          phone: inboxForm.phone,
+                          phone: targetPhone,
                           startDate: inboxForm.eventStartDate,
                           endDate: inboxForm.eventEndDate,
                           rooms: inboxForm.rooms,
                           note: inboxForm.note,
                           sourceLabel: 'Inbox'
                         });
-                        openWhatsApp(inboxForm.phone, msg);
+                        openWhatsApp(targetPhone, msg);
                       }}
                       className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase hover:bg-emerald-700 transition-colors"
                     >
