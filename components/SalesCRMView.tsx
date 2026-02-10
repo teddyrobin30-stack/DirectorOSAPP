@@ -5,7 +5,7 @@ import {
   Clock, CheckCircle2, XCircle, Search, Inbox, Users, Globe,
   Archive, Download, ArrowDownUp, Check, X,
   LayoutList, CalendarDays, ChevronLeft, ChevronRight, Trash2,
-  PieChart
+  PieChart, RotateCcw, FolderOpen
 } from 'lucide-react';
 
 // TYPES
@@ -104,6 +104,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   const [selectedVipId, setSelectedVipId] = useState<string>(''); // Pour New Lead
   const [selectedInboxVipId, setSelectedInboxVipId] = useState<string>(''); // Pour Inbox
 
+  // Liste des archives (calculée ici pour l'onglet Archive)
+  const archivedLeads = useMemo(() => {
+    return leads.filter(l => l.status === 'archived').sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+  }, [leads]);
+
   // --- LOGIQUE CALENDRIER ---
   const calendarData = useMemo(() => {
     const year = calendarDate.getFullYear();
@@ -192,8 +197,29 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   };
 
   const handleUpdateLead = (lead: Lead) => {
-    onUpdateLeads(leads.map(l => l.id === lead.id ? lead : l));
+    onUpdateLeads(leads.map(l => String(l.id) === String(lead.id) ? lead : l));
     setSelectedLead(lead);
+  };
+
+  const handleArchiveLead = (lead: Lead) => {
+    if (window.confirm("Voulez-vous archiver ce dossier ? Il ne sera plus visible dans le pipeline.")) {
+        onUpdateLeads(leads.map(l => String(l.id) === String(lead.id) ? { ...l, status: 'archived' } : l));
+        setSelectedLead(null);
+        setToastMessage("Dossier archivé avec succès");
+        setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
+
+  const handleRestoreLead = (lead: Lead) => {
+    onUpdateLeads(leads.map(l => String(l.id) === String(lead.id) ? { ...l, status: 'en_cours' } : l));
+    setToastMessage("Dossier restauré");
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleDeleteDefinitely = (id: string | number) => {
+    if (window.confirm("ATTENTION : Suppression définitive. Continuer ?")) {
+        onUpdateLeads(leads.filter(l => String(l.id) !== String(id)));
+    }
   };
 
   const handleValidateRequest = (item: InboxItem) => {
@@ -432,20 +458,13 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
                   <textarea className="flex-1 w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl outline-none text-sm font-medium resize-none" value={selectedLead.note} onChange={(e) => handleUpdateLead({ ...selectedLead, note: e.target.value })} placeholder="Notes internes et historique..." />
                   
-                  {/* BOUTON SUPPRIMER CORRIGÉ AVEC COMPARAISON TEXTUELLE */}
+                  {/* BOUTON ARCHIVER */}
                   <div className="pt-6 flex justify-end">
                     <button 
-                      onClick={() => {
-                        if (window.confirm('Êtes-vous sûr de vouloir supprimer définitivement ce dossier ?')) {
-                          // FIX: Conversion en String pour éviter les erreurs de type (123 !== "123")
-                          const nextLeads = leads.filter(l => String(l.id) !== String(selectedLead.id));
-                          onUpdateLeads(nextLeads);
-                          setSelectedLead(null);
-                        }
-                      }}
-                      className="text-red-400 hover:text-red-600 text-xs font-black uppercase flex items-center gap-2"
+                      onClick={() => handleArchiveLead(selectedLead)}
+                      className="text-orange-400 hover:text-orange-600 text-xs font-black uppercase flex items-center gap-2"
                     >
-                      <Trash2 size={14} /> Supprimer le dossier
+                      <Archive size={14} /> Archiver le dossier
                     </button>
                   </div>
                 </div>
@@ -500,6 +519,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
+                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
@@ -521,6 +541,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
+                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
@@ -749,8 +770,41 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                   <Download size={16} /> Exporter Excel
                 </button>
              </div>
-             <div className="flex-1 rounded-[32px] border bg-white dark:bg-slate-800 p-4 overflow-auto flex items-center justify-center">
-                <p className="text-center text-slate-400">Consultez l'export Excel pour le détail complet.</p>
+             
+             {/* LISTE DES DOSSIERS ARCHIVÉS */}
+             <div className="flex-1 rounded-[32px] border bg-white dark:bg-slate-800 p-4 overflow-auto no-scrollbar">
+                {archivedLeads.length > 0 ? (
+                  <div className="space-y-3">
+                    {archivedLeads.map(lead => (
+                      <div key={lead.id} className="p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 flex justify-between items-center opacity-75 hover:opacity-100 transition-opacity">
+                         <div>
+                            <h4 className="font-bold text-sm">{lead.groupName}</h4>
+                            <p className="text-xs text-slate-500">{lead.contactName} • {new Date(lead.requestDate).toLocaleDateString()}</p>
+                         </div>
+                         <div className="flex gap-2">
+                            <button 
+                              onClick={() => handleRestoreLead(lead)} 
+                              className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-xs font-bold uppercase flex items-center gap-1 hover:bg-blue-200"
+                            >
+                              <RotateCcw size={14}/> Restaurer
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteDefinitely(lead.id)} 
+                              className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Supprimer définitivement"
+                            >
+                              <Trash2 size={16}/>
+                            </button>
+                         </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center opacity-30">
+                    <FolderOpen size={48} className="mb-4 text-slate-400"/>
+                    <p className="text-center text-slate-400 font-bold">Aucun dossier archivé.</p>
+                  </div>
+                )}
              </div>
           </div>
         )}

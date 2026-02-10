@@ -170,7 +170,7 @@ export interface Group {
 // =======================
 // CRM (Sales & Leads)
 // =======================
-export type LeadStatus = 'nouveau' | 'en_cours' | 'valide' | 'perdu';
+export type LeadStatus = 'nouveau' | 'en_cours' | 'valide' | 'perdu' | 'archived';
 
 export interface LeadChecklist {
   roomSetup: boolean;

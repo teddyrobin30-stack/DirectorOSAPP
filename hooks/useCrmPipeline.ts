@@ -8,7 +8,8 @@ export const useCrmPipeline = (leads: Lead[]) => {
   const [sort, setSort] = useState<'event_asc' | 'urgency' | 'created_desc' | 'alpha'>('event_asc');
 
   const processedLeads = useMemo(() => {
-    let items = [...leads];
+    // ✅ MODIFICATION ICI : On exclut les dossiers archivés par défaut
+    let items = leads.filter(l => l.status !== 'archived');
 
     if (search) {
       const lower = safeLower(search);
