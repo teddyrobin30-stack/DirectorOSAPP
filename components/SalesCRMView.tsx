@@ -3,8 +3,9 @@ import {
   Briefcase, Plus, User, Phone, Mail, Calendar,
   CheckSquare, AlertTriangle, ArrowLeft, Filter,
   Clock, CheckCircle2, XCircle, Search, Inbox, Users, Globe,
-  Archive, Download, ArrowDownUp, Check,
-  LayoutList, CalendarDays, ChevronLeft, ChevronRight, Trash2
+  Archive, Download, ArrowDownUp, Check, X,
+  LayoutList, CalendarDays, ChevronLeft, ChevronRight, Trash2,
+  PieChart
 } from 'lucide-react';
 
 // TYPES
@@ -95,8 +96,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   
   // Filtre recherche Contacts
   const [contactSearch, setContactSearch] = useState('');
+  
+  // État pour la fiche détail contact (Modal)
+  const [viewingContact, setViewingContact] = useState<any | null>(null);
 
-  // Gestion Selection Contact
+  // Gestion Selection Contact (Formulaires)
   const [selectedVipId, setSelectedVipId] = useState<string>(''); // Pour New Lead
   const [selectedInboxVipId, setSelectedInboxVipId] = useState<string>(''); // Pour Inbox
 
@@ -161,6 +165,17 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   
   // Utilisation sécurisée de onUpdateClients via updateAppContacts si besoin
   const updateAppContacts = (next: any[]) => onUpdateContacts ? onUpdateContacts(next) : onUpdateClients?.(next);
+
+  // Helper pour l'historique contact
+  const getContactHistory = (contact: any) => {
+    if (!contact) return { total: 0, validated: 0, history: [] };
+    const history = leads.filter(l => 
+      safeLower(l.contactName) === safeLower(contact.name) || 
+      safeLower(l.email) === safeLower(contact.email)
+    );
+    const validated = history.filter(l => l.status === 'valide').length;
+    return { total: history.length, validated, history };
+  };
 
   // Forms
   const [form, setForm] = useState<any>({ groupName: '', contactName: '', email: '', phone: '', pax: 0, note: '', startDate: '', endDate: '', rooms: defaultRooms() });
@@ -472,7 +487,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
-                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
@@ -494,7 +508,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
-                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
@@ -575,7 +588,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
         {/* --- AUTRES VUES --- */}
         {activeTab === 'contacts' && (
-          <div className="h-full overflow-y-auto p-4 md:px-6 pb-20 no-scrollbar">
+          <div className="h-full overflow-y-auto p-4 md:px-6 pb-20 no-scrollbar relative">
             {/* Barre de recherche contacts */}
             <div className="mb-4 flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border border-transparent focus-within:border-indigo-500 transition-all">
                <Search size={18} className="text-slate-400 mr-3" />
@@ -590,7 +603,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredGridContacts.map((contact: any) => (
-                <div key={contact.id} className={`p-4 rounded-2xl border flex items-center gap-4 transition-all hover:shadow-md cursor-pointer ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-100 shadow-sm hover:bg-slate-50'}`}>
+                <div 
+                  key={contact.id} 
+                  onClick={() => setViewingContact(contact)}
+                  className={`p-4 rounded-2xl border flex items-center gap-4 transition-all hover:shadow-md cursor-pointer ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-100 shadow-sm hover:bg-slate-50'}`}
+                >
                    {/* Avatar/Initials */}
                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${contact.color || 'bg-slate-200 text-slate-500'}`}>
                       {contact.initials || contact.name.slice(0, 2).toUpperCase()}
@@ -642,6 +659,72 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                 </div>
               )}
             </div>
+
+            {/* MODAL DETAIL CONTACT */}
+            {viewingContact && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+                <div className={`w-full max-w-lg rounded-[32px] p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto no-scrollbar ${userSettings.darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
+                   <button 
+                     onClick={() => setViewingContact(null)} 
+                     className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"
+                   >
+                     <X size={20}/>
+                   </button>
+
+                   <div className="flex flex-col items-center mb-6">
+                      <div className={`w-20 h-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-md mb-3 ${viewingContact.color || 'bg-slate-200 text-slate-500'}`}>
+                        {viewingContact.initials || viewingContact.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <h3 className="text-xl font-black">{viewingContact.name}</h3>
+                      <p className="text-sm text-slate-400 font-bold uppercase">{viewingContact.company || viewingContact.companyName || 'Particulier'}</p>
+                   </div>
+
+                   {/* Stats */}
+                   <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
+                         <span className="text-2xl font-black text-indigo-600 block">{getContactHistory(viewingContact).total}</span>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Totaux</span>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
+                         <span className="text-2xl font-black text-emerald-500 block">{getContactHistory(viewingContact).validated}</span>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Validés</span>
+                      </div>
+                   </div>
+
+                   {/* Infos */}
+                   <div className="space-y-3 mb-6">
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                         <Phone size={18} className="text-slate-400"/>
+                         <span className="font-bold text-sm">{viewingContact.phone || '-'}</span>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                         <Mail size={18} className="text-slate-400"/>
+                         <span className="font-bold text-sm">{viewingContact.email || '-'}</span>
+                      </div>
+                   </div>
+
+                   {/* Historique */}
+                   <h4 className="font-black text-sm uppercase text-slate-400 mb-3 ml-1">Historique Récent</h4>
+                   <div className="space-y-2">
+                      {getContactHistory(viewingContact).history.length > 0 ? (
+                        getContactHistory(viewingContact).history.map((lead: Lead) => (
+                          <div key={lead.id} className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                             <div>
+                                <p className="font-bold text-xs">{lead.groupName}</p>
+                                <p className="text-[10px] text-slate-400">{new Date(lead.requestDate).toLocaleDateString()}</p>
+                             </div>
+                             <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${lead.status === 'valide' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                {lead.status}
+                             </span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-center text-xs text-slate-400 italic py-4">Aucun historique de dossier.</p>
+                      )}
+                   </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
         
