@@ -4,9 +4,7 @@ import { Save, AlertOctagon, UserCheck, Calendar as CalendarIcon, FileText, X, C
 // ✅ IMPORT 1 : Récupérer tes types (ajuste le chemin selon ton projet, ex: '../types')
 import { ExtendedInboxItem, InboxStatus } from '../types'; 
 
-// ✅ IMPORT 2 : Soit tu importes la fonction, soit tu la définis ici localement
-// Si tu l'as mise dans un fichier 'utils.ts' ou 'crmUtils.ts', importe-la.
-// Sinon, colle-la juste ici pour que ce fichier soit autonome :
+// ✅ IMPORT 2 : Logique d'alerte locale
 const isOverdueAlert = (dateRelance?: string): boolean => {
   if (!dateRelance) return false;
   const targetDate = new Date(dateRelance);
@@ -19,7 +17,7 @@ interface InboxDetailPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (item: ExtendedInboxItem) => void;
-  onValidate?: (item: ExtendedInboxItem) => void; // ✅ Ajout de la prop onValidate
+  onValidate?: (item: ExtendedInboxItem) => void; // ✅ Ajout de la prop
 }
 
 const InboxDetailPanel: React.FC<InboxDetailPanelProps> = ({ item, isOpen, onClose, onSave, onValidate }) => {
@@ -51,10 +49,9 @@ const InboxDetailPanel: React.FC<InboxDetailPanelProps> = ({ item, isOpen, onClo
     onClose();
   };
 
-  // ✅ Fonction de validation
+  // ✅ Fonction de validation (fusionne les données et déclenche l'action parent)
   const handleValidate = () => {
     if (onValidate) {
-        // On passe l'item fusionné avec les dernières modifs du formulaire
         onValidate({ 
             ...item, 
             ...formData,
@@ -150,7 +147,7 @@ const InboxDetailPanel: React.FC<InboxDetailPanelProps> = ({ item, isOpen, onClo
         {/* Footer */}
         <div className="p-6 border-t dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-b-[32px] flex flex-col gap-3">
             
-            {/* ✅ BOUTON VALIDER (PIPELINE) */}
+            {/* ✅ BOUTON VALIDER (Affiché seulement si la fonction est fournie) */}
             {onValidate && (
                 <button 
                     onClick={handleValidate}

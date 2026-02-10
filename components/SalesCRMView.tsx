@@ -1112,7 +1112,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   );
 };
 
-{/* ✅ INSÈRE LE CODE ICI, juste avant la dernière fermeture de div */}
+{/* MODAL FICHE DOSSIER */}
       <InboxDetailPanel 
         isOpen={!!editingInboxItem} 
         item={editingInboxItem} 
@@ -1121,7 +1121,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         onValidate={handleValidateRequest}
       />
 
-    </div> // <--- C'est la fermeture de la div principale (<div className="h-full flex flex-col...>)
+    </div>
   );
 };
 
