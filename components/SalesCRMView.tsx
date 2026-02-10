@@ -1100,15 +1100,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
       </div>
       
-      {/* [NEW] MODAL FICHE DOSSIER */}
-      <InboxDetailPanel 
-        isOpen={!!editingInboxItem} 
-        item={editingInboxItem} 
-        onClose={() => setEditingInboxItem(null)} 
-        onSave={handleSaveInboxItem} 
-      />
-  
-      {/* MODAL FICHE DOSSIER */}
+     {/* MODAL FICHE DOSSIER */}
       <InboxDetailPanel 
         isOpen={!!editingInboxItem} 
         item={editingInboxItem} 
@@ -1117,8 +1109,8 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         onValidate={handleValidateRequest}
       />
 
-    </div>  {/* <--- Ceci doit être la SEULE fermeture de la div principale */}
+    </div> {/* Fermeture de la div racine */}
   );
-}; {/* <--- Ceci doit être la SEULE fermeture de la fonction */}
+};
 
 export default SalesCRMView;
