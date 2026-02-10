@@ -258,7 +258,26 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `crm_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `crm_inbox_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  // ✅ NOUVEAU : Fonction d'export des contacts
+  const handleExportContactsCSV = () => {
+    const headers = ['Nom', 'Entreprise', 'Role', 'Email', 'Téléphone', 'Catégorie'];
+    const rows = appContacts.map((c: any) => [
+      `"${c.name}"`,
+      `"${c.company || c.companyName || ''}"`,
+      `"${c.role || ''}"`,
+      c.email || '',
+      c.phone || '',
+      `"${c.category || ''}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `contacts_export_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
 
@@ -623,16 +642,26 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         {/* --- AUTRES VUES --- */}
         {activeTab === 'contacts' && (
           <div className="h-full overflow-y-auto p-4 md:px-6 pb-20 no-scrollbar relative">
-            {/* Barre de recherche contacts */}
-            <div className="mb-4 flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border border-transparent focus-within:border-indigo-500 transition-all">
-               <Search size={18} className="text-slate-400 mr-3" />
-               <input 
-                 type="text" 
-                 placeholder="Rechercher un contact..." 
-                 value={contactSearch}
-                 onChange={(e) => setContactSearch(e.target.value)}
-                 className="bg-transparent outline-none w-full text-sm font-bold text-slate-700 dark:text-white"
-               />
+            <div className="flex gap-4 mb-4">
+              {/* Barre de recherche contacts */}
+              <div className="flex-1 flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border border-transparent focus-within:border-indigo-500 transition-all">
+                 <Search size={18} className="text-slate-400 mr-3" />
+                 <input 
+                   type="text" 
+                   placeholder="Rechercher un contact..." 
+                   value={contactSearch}
+                   onChange={(e) => setContactSearch(e.target.value)}
+                   className="bg-transparent outline-none w-full text-sm font-bold text-slate-700 dark:text-white"
+                 />
+              </div>
+              
+              {/* BOUTON EXPORT CONTACTS */}
+              <button 
+                onClick={handleExportContactsCSV} 
+                className="px-6 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:opacity-90 transition-opacity"
+              >
+                <Download size={16} /> Exporter
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
