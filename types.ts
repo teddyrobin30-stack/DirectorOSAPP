@@ -198,8 +198,6 @@ export interface Lead {
 
 export type InboxSource = 'email' | 'phone' | 'website';
 
-// Dans src/types.ts
-
 export interface InboxItem {
   id: string | number;
   contactName: string;
@@ -210,7 +208,7 @@ export interface InboxItem {
   source: InboxSource;
   
   // Nouveaux champs pour le traitement
-  status: 'to_process' | 'processed' | 'archived'; // Statut global
+  status: 'to_process' | 'processed' | 'archived'; // Statut global (Technique)
   processingStatus?: 'not_started' | 'in_progress' | 'finished'; // État d'avancement
   assignee?: string; // Qui est en charge
   quoteSent?: boolean; // Devis envoyé ?
@@ -220,6 +218,18 @@ export interface InboxItem {
   eventEndDate?: string;
   note?: string;
   rooms?: Rooms;
+}
+
+// --- AJOUTS POUR LA NOUVELLE FICHE DOSSIER ---
+export type InboxStatus = 'pas_commence' | 'en_cours' | 'termine' | 'archive';
+
+export interface ExtendedInboxItem extends InboxItem {
+  responsable?: string;
+  statut?: InboxStatus; // Statut Métier (distinct du status technique)
+  devisEnvoye?: boolean; // Alias fonctionnel pour quoteSent
+  notesInterne?: string;
+  dateRelance?: string; // Format ISO YYYY-MM-DD
+  dateDerniereModification?: string;
 }
 
 // =======================
