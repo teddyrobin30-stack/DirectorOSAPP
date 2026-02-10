@@ -231,13 +231,45 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         </button>
       </div>
 
-      {/* TABS */}
-      <div className="px-6 py-4 flex p-1 rounded-2xl bg-slate-200 dark:bg-slate-800 w-fit m-4 space-x-2">
-        {(['pipeline', 'inbox', 'contacts', 'archives', 'new_lead'] as const).map(t => (
-          <button key={t} onClick={() => setActiveTab(t)} className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === t ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}>
-            {t === 'new_lead' ? <Plus size={14} /> : t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
+      {/* TABS - SEGMENTED CONTROL ANIMÉ */}
+      <div className="px-6 py-4">
+        <div className="flex p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 w-fit max-w-full overflow-x-auto no-scrollbar mx-auto md:mx-4 border border-slate-200 dark:border-slate-700">
+          {[
+            { id: 'pipeline', label: 'Pipeline', icon: Filter },
+            { id: 'inbox', label: 'Inbox', icon: Inbox },
+            { id: 'contacts', label: 'Contacts', icon: Users },
+            { id: 'archives', label: 'Archives', icon: Archive },
+            { id: 'new_lead', label: 'Nouveau Lead', icon: Plus },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`
+                  relative flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wide transition-colors z-10 outline-none
+                  ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}
+                `}
+                style={{ WebkitTapHighlightColor: 'transparent' }} // Supprime le flash bleu sur mobile
+              >
+                {/* Animation de fond (La "Pilule" Blanche) */}
+                {isActive && (
+                  <motion.div
+                    layoutId="active-tab-pill"
+                    className="absolute inset-0 bg-white dark:bg-slate-900 rounded-full shadow-sm border border-slate-100 dark:border-slate-700 -z-10"
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  />
+                )}
+                
+                {/* Contenu du bouton */}
+                <Icon size={14} className="relative z-10" strokeWidth={2.5} />
+                <span className="relative z-10 whitespace-nowrap">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden p-4 md:px-6 md:pb-20 flex flex-col md:flex-row gap-6">
