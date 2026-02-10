@@ -1099,8 +1099,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         )}
 
       </div>
-      
-     {/* MODAL FICHE DOSSIER */}
+
       <InboxDetailPanel 
         isOpen={!!editingInboxItem} 
         item={editingInboxItem} 
@@ -1109,7 +1108,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         onValidate={handleValidateRequest}
       />
 
-    </div> {/* Fermeture de la div racine */}
+    </div>
   );
 };
 
