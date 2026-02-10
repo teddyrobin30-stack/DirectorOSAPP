@@ -231,13 +231,46 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         </button>
       </div>
 
-      {/* TABS */}
-      <div className="px-6 py-4 flex p-1 rounded-2xl bg-slate-200 dark:bg-slate-800 w-fit m-4 space-x-2">
-        {(['pipeline', 'inbox', 'contacts', 'archives', 'new_lead'] as const).map(t => (
-          <button key={t} onClick={() => setActiveTab(t)} className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === t ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}>
-            {t === 'new_lead' ? <Plus size={14} /> : t.charAt(0).toUpperCase() + t.slice(1)}
+      {/* TABS - STYLE STABLE (IDENTIQUE RECEPTION) */}
+      <div className="px-6 py-4">
+        <div className="flex p-1 rounded-2xl bg-slate-200 dark:bg-slate-800 w-fit overflow-x-auto whitespace-nowrap max-w-full no-scrollbar px-2">
+          
+          <button 
+            onClick={() => setActiveTab('pipeline')} 
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'pipeline' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
+          >
+            <Filter size={14}/> Pipeline
           </button>
-        ))}
+
+          <button 
+            onClick={() => setActiveTab('inbox')} 
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'inbox' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
+          >
+            <Inbox size={14}/> Inbox
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('contacts')} 
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'contacts' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
+          >
+            <Users size={14}/> Contacts
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('archives')} 
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'archives' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
+          >
+            <Archive size={14}/> Archives
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('new_lead')} 
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'new_lead' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
+          >
+            <Plus size={14}/> Nouveau Lead
+          </button>
+
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden p-4 md:px-6 md:pb-20 flex flex-col md:flex-row gap-6">
@@ -391,7 +424,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
               <h3 className="text-lg font-black uppercase mb-4">Saisie Rapide</h3>
               <div className="space-y-4">
                 
-                {/* ✅ AJOUT: SÉLECTEUR DE CONTACT DANS L'INBOX */}
+                {/* ✅ SÉLECTEUR DE CONTACT DANS L'INBOX */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
                   <select 
@@ -420,12 +453,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     ))}
                   </select>
 
-                  {/* ✅ AJOUT: BOUTONS SMS/WHATSAPP DANS L'INBOX AVEC LOGIQUE BDD */}
+                  {/* ✅ BOUTONS SMS/WHATSAPP DANS L'INBOX AVEC LOGIQUE BDD */}
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
@@ -447,7 +479,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
-                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
