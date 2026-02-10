@@ -201,6 +201,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     setSelectedLead(lead);
   };
 
+  // ✅ LOGIQUE D'ARCHIVAGE (Correction du bug de suppression)
   const handleArchiveLead = (lead: Lead) => {
     if (window.confirm("Voulez-vous archiver ce dossier ? Il ne sera plus visible dans le pipeline.")) {
         onUpdateLeads(leads.map(l => String(l.id) === String(lead.id) ? { ...l, status: 'archived' } : l));
@@ -244,6 +245,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // ✅ EXPORT INBOX
   const handleExportCSV = () => {
     const headers = ['Date', 'Contact', 'Email', 'Tel', 'Statut', 'Note'];
     const rows = (inbox || []).map(i => [
@@ -262,7 +264,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     link.click();
   };
 
-  // ✅ NOUVEAU : Fonction d'export des contacts
+  // ✅ NOUVEAU : EXPORT CONTACTS
   const handleExportContactsCSV = () => {
     const headers = ['Nom', 'Entreprise', 'Role', 'Email', 'Téléphone', 'Catégorie'];
     const rows = appContacts.map((c: any) => [
@@ -655,7 +657,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                  />
               </div>
               
-              {/* BOUTON EXPORT CONTACTS */}
+              {/* ✅ NOUVEAU BOUTON EXPORT CONTACTS */}
               <button 
                 onClick={handleExportContactsCSV} 
                 className="px-6 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:opacity-90 transition-opacity"
