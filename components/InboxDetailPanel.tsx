@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, AlertOctagon, UserCheck, Calendar as CalendarIcon, FileText, X } from 'lucide-react';
+import { Save, AlertOctagon, UserCheck, Calendar as CalendarIcon, FileText, X, CheckCircle } from 'lucide-react';
 
 // ✅ IMPORT 1 : Récupérer tes types (ajuste le chemin selon ton projet, ex: '../types')
 import { ExtendedInboxItem, InboxStatus } from '../types'; 
@@ -19,9 +19,10 @@ interface InboxDetailPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (item: ExtendedInboxItem) => void;
+  onValidate?: (item: ExtendedInboxItem) => void; // ✅ Ajout de la prop onValidate
 }
 
-const InboxDetailPanel: React.FC<InboxDetailPanelProps> = ({ item, isOpen, onClose, onSave }) => {
+const InboxDetailPanel: React.FC<InboxDetailPanelProps> = ({ item, isOpen, onClose, onSave, onValidate }) => {
   const [formData, setFormData] = useState<Partial<ExtendedInboxItem>>({});
 
   // Reset du formulaire à l'ouverture
@@ -50,11 +51,23 @@ const InboxDetailPanel: React.FC<InboxDetailPanelProps> = ({ item, isOpen, onClo
     onClose();
   };
 
+  // ✅ Fonction de validation
+  const handleValidate = () => {
+    if (onValidate) {
+        // On passe l'item fusionné avec les dernières modifs du formulaire
+        onValidate({ 
+            ...item, 
+            ...formData,
+            dateDerniereModification: new Date().toISOString()
+        } as ExtendedInboxItem);
+        onClose();
+    }
+  };
+
   const isAlert = isOverdueAlert(formData.dateRelance);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-      {/* ... Le reste de ton JSX est parfait, ne change rien ... */}
       <div className="bg-white dark:bg-slate-900 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-[32px] shadow-2xl flex flex-col">
         {/* Header */}
         <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 sticky top-0 z-10">
@@ -135,13 +148,25 @@ const InboxDetailPanel: React.FC<InboxDetailPanelProps> = ({ item, isOpen, onClo
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t dark:border-slate-800">
-          <button 
-            onClick={handleSave}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"
-          >
-            <Save size={16} /> Sauvegarder les modifications
-          </button>
+        <div className="p-6 border-t dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-b-[32px] flex flex-col gap-3">
+            
+            {/* ✅ BOUTON VALIDER (PIPELINE) */}
+            {onValidate && (
+                <button 
+                    onClick={handleValidate}
+                    className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-emerald-200 dark:shadow-none flex items-center justify-center gap-2 transition-transform active:scale-95"
+                >
+                    <CheckCircle size={16} /> Valider & Créer Dossier
+                </button>
+            )}
+
+            {/* BOUTON SAUVEGARDER (SIMPLE) */}
+            <button 
+                onClick={handleSave}
+                className="w-full py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2 transition-colors"
+            >
+                <Save size={16} /> Sauvegarder sans valider
+            </button>
         </div>
       </div>
     </div>

@@ -1112,4 +1112,17 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   );
 };
 
+{/* ✅ INSÈRE LE CODE ICI, juste avant la dernière fermeture de div */}
+      <InboxDetailPanel 
+        isOpen={!!editingInboxItem} 
+        item={editingInboxItem} 
+        onClose={() => setEditingInboxItem(null)} 
+        onSave={handleSaveInboxItem} 
+        onValidate={handleValidateRequest}
+      />
+
+    </div> // <--- C'est la fermeture de la div principale (<div className="h-full flex flex-col...>)
+  );
+};
+
 export default SalesCRMView;
