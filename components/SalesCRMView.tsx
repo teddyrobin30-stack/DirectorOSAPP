@@ -92,6 +92,9 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pipelineViewMode, setPipelineViewMode] = useState<'list' | 'calendar'>('list');
   const [calendarDate, setCalendarDate] = useState(() => new Date());
+  
+  // Filtre recherche Contacts
+  const [contactSearch, setContactSearch] = useState('');
 
   // Gestion Selection Contact
   const [selectedVipId, setSelectedVipId] = useState<string>(''); // Pour New Lead
@@ -138,6 +141,17 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     });
     return arr;
   }, [appContacts]);
+
+  // Filtrage pour l'affichage grille
+  const filteredGridContacts = useMemo(() => {
+    if (!contactSearch) return vipCandidates;
+    const lower = contactSearch.toLowerCase();
+    return vipCandidates.filter((c: any) => 
+      (c.name && c.name.toLowerCase().includes(lower)) ||
+      (c.company && c.company.toLowerCase().includes(lower)) ||
+      (c.companyName && c.companyName.toLowerCase().includes(lower))
+    );
+  }, [vipCandidates, contactSearch]);
 
   // Récupération de l'objet Contact complet pour l'Inbox
   const selectedInboxContact = useMemo(() => {
@@ -231,7 +245,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         </button>
       </div>
 
-      {/* TABS - STYLE STABLE (IDENTIQUE RECEPTION) */}
+      {/* TABS - STYLE STABLE & TACTILE */}
       <div className="px-6 py-4">
         <div className="flex p-1 rounded-2xl bg-slate-200 dark:bg-slate-800 w-fit overflow-x-auto whitespace-nowrap max-w-full no-scrollbar px-2">
           
@@ -458,6 +472,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
+                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
@@ -479,6 +494,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
+                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
@@ -558,7 +574,76 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         )}
 
         {/* --- AUTRES VUES --- */}
-        {activeTab === 'contacts' && <div className="p-8 text-center text-slate-400 font-bold">Gestion des contacts synchronisée. Utilisez la vue "VIP" pour l'édition complète.</div>}
+        {activeTab === 'contacts' && (
+          <div className="h-full overflow-y-auto p-4 md:px-6 pb-20 no-scrollbar">
+            {/* Barre de recherche contacts */}
+            <div className="mb-4 flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border border-transparent focus-within:border-indigo-500 transition-all">
+               <Search size={18} className="text-slate-400 mr-3" />
+               <input 
+                 type="text" 
+                 placeholder="Rechercher un contact..." 
+                 value={contactSearch}
+                 onChange={(e) => setContactSearch(e.target.value)}
+                 className="bg-transparent outline-none w-full text-sm font-bold text-slate-700 dark:text-white"
+               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredGridContacts.map((contact: any) => (
+                <div key={contact.id} className={`p-4 rounded-2xl border flex items-center gap-4 transition-all hover:shadow-md cursor-pointer ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-100 shadow-sm hover:bg-slate-50'}`}>
+                   {/* Avatar/Initials */}
+                   <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${contact.color || 'bg-slate-200 text-slate-500'}`}>
+                      {contact.initials || contact.name.slice(0, 2).toUpperCase()}
+                   </div>
+                   
+                   {/* Info */}
+                   <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-sm truncate">{contact.name}</h4>
+                      <p className="text-xs text-slate-400 truncate font-medium uppercase tracking-wide">{contact.company || contact.companyName || 'Particulier'}</p>
+                      
+                      {/* Action buttons */}
+                      <div className="flex gap-2 mt-2">
+                         {contact.phone && (
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); openSMS(contact.phone, ''); }} 
+                             className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 transition-colors"
+                             title="SMS"
+                           >
+                             <Briefcase size={14}/>
+                           </button>
+                         )}
+                         {contact.phone && (
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); openWhatsApp(contact.phone, ''); }} 
+                             className="p-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 transition-colors"
+                             title="WhatsApp"
+                           >
+                             <Phone size={14}/>
+                           </button>
+                         )}
+                         {contact.email && (
+                           <a 
+                             href={`mailto:${contact.email}`}
+                             onClick={(e) => e.stopPropagation()}
+                             className="p-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 transition-colors"
+                             title="Email"
+                           >
+                             <Mail size={14}/>
+                           </a>
+                         )}
+                      </div>
+                   </div>
+                </div>
+              ))}
+              {filteredGridContacts.length === 0 && (
+                <div className="col-span-full text-center py-10 opacity-50">
+                  <Users size={48} className="mx-auto mb-2 text-slate-300"/>
+                  <p className="text-sm font-bold text-slate-400">Aucun contact trouvé.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         
         {activeTab === 'archives' && (
           <div className="w-full h-full flex flex-col p-6">
