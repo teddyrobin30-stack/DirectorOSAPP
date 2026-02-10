@@ -198,21 +198,28 @@ export interface Lead {
 
 export type InboxSource = 'email' | 'phone' | 'website';
 
+// Dans src/types.ts
+
 export interface InboxItem {
   id: string | number;
   contactName: string;
   companyName?: string;
   email: string;
   phone: string;
-  requestDate: string;
+  requestDate: string; // Date de création (reçu le...)
   source: InboxSource;
-  status: 'to_process' | 'processed' | 'archived';
+  
+  // Nouveaux champs pour le traitement
+  status: 'to_process' | 'processed' | 'archived'; // Statut global
+  processingStatus?: 'not_started' | 'in_progress' | 'finished'; // État d'avancement
+  assignee?: string; // Qui est en charge
+  quoteSent?: boolean; // Devis envoyé ?
+  lastFollowUp?: string; // Date de relance
+  
   eventStartDate?: string;
   eventEndDate?: string;
   note?: string;
-  quoteSent: boolean;
-  lastFollowUp?: string;
-  rooms?: Rooms; // ✅ Ajouté pour la synchronisation
+  rooms?: Rooms;
 }
 
 // =======================

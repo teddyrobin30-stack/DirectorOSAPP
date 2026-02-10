@@ -5,7 +5,7 @@ import {
   Clock, CheckCircle2, XCircle, Search, Inbox, Users, Globe,
   Archive, Download, ArrowDownUp, Check, X,
   LayoutList, CalendarDays, ChevronLeft, ChevronRight, Trash2,
-  PieChart, RotateCcw, FolderOpen
+  PieChart, RotateCcw, FolderOpen, UserCheck, AlertCircle
 } from 'lucide-react';
 
 // TYPES
@@ -31,6 +31,14 @@ const toDateInputValue = (v?: string) => {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return '';
   return d.toISOString().split('T')[0];
+};
+
+// Fonction pour calculer l'alerte J+7 sur la relance
+const getRelanceAlert = (lastFollowUp?: string) => {
+    if (!lastFollowUp) return null;
+    const diff = (new Date().getTime() - new Date(lastFollowUp).getTime()) / (1000 * 3600 * 24);
+    if (diff > 7) return { label: `Relance J+${Math.floor(diff)}`, urgent: true };
+    return null;
 };
 
 /* -------------------- COMPOSANTS INTERNES -------------------- */
@@ -104,7 +112,10 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   const [selectedVipId, setSelectedVipId] = useState<string>(''); // Pour New Lead
   const [selectedInboxVipId, setSelectedInboxVipId] = useState<string>(''); // Pour Inbox
 
-  // Liste des archives (calculée ici pour l'onglet Archive)
+  // État pour l'item sélectionné dans l'Inbox (Mode Détail)
+  const [viewingInboxItem, setViewingInboxItem] = useState<InboxItem | null>(null);
+
+  // Liste des archives
   const archivedLeads = useMemo(() => {
     return leads.filter(l => l.status === 'archived').sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
   }, [leads]);
@@ -116,10 +127,8 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const days: (Date | null)[] = [];
-    
-    let startDay = firstDay.getDay(); // 0=Sun
-    startDay = startDay === 0 ? 6 : startDay - 1; // Mon=0
-    
+    let startDay = firstDay.getDay(); 
+    startDay = startDay === 0 ? 6 : startDay - 1; 
     for (let i = 0; i < startDay; i++) days.push(null);
     for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
     return days;
@@ -142,7 +151,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   const vipCandidates = useMemo(() => {
     const arr = [...(appContacts || [])];
     arr.sort((a, b) => {
-      // Priorité aux VIPs
       const isVipA = (a as any).vip ? 1 : 0;
       const isVipB = (b as any).vip ? 1 : 0;
       if (isVipA !== isVipB) return isVipB - isVipA;
@@ -162,13 +170,12 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     );
   }, [vipCandidates, contactSearch]);
 
-  // Récupération de l'objet Contact complet pour l'Inbox
+  // Récupération de l'objet Contact complet pour l'Inbox (Saisie Rapide)
   const selectedInboxContact = useMemo(() => {
     if (!selectedInboxVipId) return null;
     return appContacts.find((x: any) => String(x.id) === selectedInboxVipId);
   }, [selectedInboxVipId, appContacts]);
   
-  // Utilisation sécurisée de onUpdateClients via updateAppContacts si besoin
   const updateAppContacts = (next: any[]) => onUpdateContacts ? onUpdateContacts(next) : onUpdateClients?.(next);
 
   // Helper pour l'historique contact
@@ -201,7 +208,6 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     setSelectedLead(lead);
   };
 
-  // ✅ LOGIQUE D'ARCHIVAGE (Correction du bug de suppression)
   const handleArchiveLead = (lead: Lead) => {
     if (window.confirm("Voulez-vous archiver ce dossier ? Il ne sera plus visible dans le pipeline.")) {
         onUpdateLeads(leads.map(l => String(l.id) === String(lead.id) ? { ...l, status: 'archived' } : l));
@@ -223,6 +229,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     }
   };
 
+  // Validation d'une demande Inbox -> Pipeline
   const handleValidateRequest = (item: InboxItem) => {
     setForm({ 
       groupName: item.companyName ? `Groupe ${item.companyName}` : `Event ${item.contactName}`, 
@@ -231,12 +238,27 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
       phone: item.phone, 
       startDate: item.eventStartDate || '', 
       endDate: item.eventEndDate || '', 
-      note: `Source: ${item.source.toUpperCase()}.`, 
+      note: item.note || '', 
       rooms: (item as any).rooms || defaultRooms(), 
       pax: 0 
     });
-    onUpdateInbox?.(inbox.map(i => i.id === item.id ? { ...i, status: 'processed' } : i));
+    // On marque comme traité
+    onUpdateInbox?.(inbox.map(i => i.id === item.id ? { ...i, status: 'processed', processingStatus: 'finished' } : i));
     setActiveTab('new_lead');
+  };
+
+  // Archivage simple Inbox
+  const handleArchiveInboxRequest = (id: string | number) => {
+    onUpdateInbox?.(inbox.map(i => i.id === id ? { ...i, status: 'archived', processingStatus: 'finished' } : i));
+    setToastMessage('Demande archivée (Non aboutie)');
+    setTimeout(() => setToastMessage(null), 3000);
+    if(viewingInboxItem?.id === id) setViewingInboxItem(null); // Fermer le panneau
+  };
+
+  // Mise à jour d'un item Inbox (Sauvegarde des détails)
+  const handleUpdateInboxItem = (updatedItem: InboxItem) => {
+      onUpdateInbox?.(inbox.map(i => i.id === updatedItem.id ? updatedItem : i));
+      setViewingInboxItem(updatedItem); // Mettre à jour la vue locale
   };
 
   const handleArchiveRequest = (id: string) => {
@@ -307,45 +329,19 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         </button>
       </div>
 
-      {/* TABS - STYLE STABLE & TACTILE */}
+      {/* TABS */}
       <div className="px-6 py-4">
         <div className="flex p-1 rounded-2xl bg-slate-200 dark:bg-slate-800 w-fit overflow-x-auto whitespace-nowrap max-w-full no-scrollbar px-2">
-          
-          <button 
-            onClick={() => setActiveTab('pipeline')} 
-            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'pipeline' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
-          >
-            <Filter size={14}/> Pipeline
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('inbox')} 
-            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'inbox' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
-          >
-            <Inbox size={14}/> Inbox
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('contacts')} 
-            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'contacts' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
-          >
-            <Users size={14}/> Contacts
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('archives')} 
-            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'archives' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
-          >
-            <Archive size={14}/> Archives
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('new_lead')} 
-            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'new_lead' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
-          >
-            <Plus size={14}/> Nouveau Lead
-          </button>
-
+          {['pipeline', 'inbox', 'contacts', 'archives', 'new_lead'].map(t => (
+             <button 
+                key={t}
+                onClick={() => setActiveTab(t as any)} 
+                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === t ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
+             >
+                {t === 'new_lead' ? <Plus size={14}/> : t === 'pipeline' ? <Filter size={14}/> : t === 'inbox' ? <Inbox size={14}/> : t === 'contacts' ? <Users size={14}/> : <Archive size={14}/>} 
+                {t === 'new_lead' ? 'Nouveau Lead' : t.charAt(0).toUpperCase() + t.slice(1)}
+             </button>
+          ))}
         </div>
       </div>
 
@@ -502,105 +498,8 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         {/* --- VUE INBOX --- */}
         {activeTab === 'inbox' && (
           <div className="flex flex-col md:flex-row h-full gap-6 w-full">
-            <div className={`w-full md:w-1/3 p-6 rounded-[32px] border overflow-y-auto ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
-              <h3 className="text-lg font-black uppercase mb-4">Saisie Rapide</h3>
-              <div className="space-y-4">
-                
-                {/* ✅ SÉLECTEUR DE CONTACT DANS L'INBOX */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
-                  <select 
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none"
-                    value={selectedInboxVipId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedInboxVipId(id);
-                      const c = appContacts.find((x: any) => String(x.id) === id);
-                      if (c) {
-                        setInboxForm({
-                          ...inboxForm,
-                          contactName: c.name,
-                          companyName: c.company || c.companyName || '',
-                          email: c.email || '',
-                          phone: c.phone || ''
-                        });
-                      }
-                    }}
-                  >
-                    <option value="">— Sélectionner —</option>
-                    {vipCandidates.map((c: any) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.company ? `• ${c.company}` : ''}
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* ✅ BOUTONS SMS/WHATSAPP DANS L'INBOX AVEC LOGIQUE BDD */}
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
-                        const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
-                        const msg = buildMessage({
-                          groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
-                          contactName: inboxForm.contactName,
-                          email: inboxForm.email,
-                          phone: targetPhone,
-                          startDate: inboxForm.eventStartDate,
-                          endDate: inboxForm.eventEndDate,
-                          rooms: inboxForm.rooms,
-                          note: inboxForm.note,
-                          sourceLabel: 'Inbox'
-                        });
-                        openSMS(targetPhone, msg);
-                      }}
-                      className="flex-1 py-2 rounded-lg border text-[10px] font-black uppercase hover:bg-slate-100 transition-colors"
-                    >
-                      SMS
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
-                        const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
-                        const msg = buildMessage({
-                          groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
-                          contactName: inboxForm.contactName,
-                          email: inboxForm.email,
-                          phone: targetPhone,
-                          startDate: inboxForm.eventStartDate,
-                          endDate: inboxForm.eventEndDate,
-                          rooms: inboxForm.rooms,
-                          note: inboxForm.note,
-                          sourceLabel: 'Inbox'
-                        });
-                        openWhatsApp(targetPhone, msg);
-                      }}
-                      className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase hover:bg-emerald-700 transition-colors"
-                    >
-                      WhatsApp
-                    </button>
-                  </div>
-                </div>
-
-                <input type="text" placeholder="Nom Contact *" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.contactName} onChange={(e) => setInboxForm({ ...inboxForm, contactName: e.target.value })} />
-                <input type="text" placeholder="Entreprise" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.companyName} onChange={(e) => setInboxForm({ ...inboxForm, companyName: e.target.value })} />
-                <input type="email" placeholder="Email" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.email} onChange={(e) => setInboxForm({ ...inboxForm, email: e.target.value })} />
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="date" className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold" value={inboxForm.eventStartDate} onChange={(e) => setInboxForm({ ...inboxForm, eventStartDate: e.target.value })} />
-                  <input type="date" className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold" value={inboxForm.eventEndDate} onChange={(e) => setInboxForm({ ...inboxForm, eventEndDate: e.target.value })} />
-                </div>
-                <RoomsInputs compact value={inboxForm.rooms} onChange={(next) => setInboxForm({ ...inboxForm, rooms: next })} />
-                <div className="flex gap-2">
-                  {(['email', 'phone', 'website'] as InboxSource[]).map(s => (
-                    <button key={s} onClick={() => setInboxForm({ ...inboxForm, source: s })} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase border ${inboxForm.source === s ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>{s}</button>
-                  ))}
-                </div>
-                <button onClick={() => { onUpdateInbox?.([ { ...inboxForm, id: uid('inbox'), status: 'to_process', requestDate: new Date().toISOString() }, ...inbox ]); setInboxForm({ contactName: '', companyName: '', email: '', phone: '', source: 'email', rooms: defaultRooms() }); setSelectedInboxVipId(''); }} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 transition-all">Enregistrer Demande</button>
-              </div>
-            </div>
-
+            
+            {/* PANNEAU GAUCHE : LISTE DES DEMANDES */}
             <div className="flex-1 flex flex-col h-full overflow-hidden">
               <div className="mb-4 p-4 rounded-[24px] border bg-white dark:bg-slate-800 flex justify-between items-center gap-4">
                 <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border">
@@ -615,28 +514,198 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pb-10">
-                {processedInbox.map(item => (
-                  <div key={item.id} className={`p-4 rounded-2xl border flex justify-between items-center bg-white dark:bg-slate-800 transition-all ${checkIsOverdue(item) ? 'border-orange-300 bg-orange-50/50' : 'border-slate-100'}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-400">{item.source === 'email' ? <Mail size={18} /> : item.source === 'phone' ? <Phone size={18} /> : <Globe size={18} />}</div>
-                      <div>
-                        <h4 className="font-bold text-sm">{item.contactName} <span className="text-slate-400 font-medium">{item.companyName ? `(${item.companyName})` : ''}</span></h4>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">Reçu le {new Date(item.requestDate).toLocaleDateString()}</p>
-                        {checkIsOverdue(item) && <span className="text-[9px] font-black text-orange-500 flex items-center gap-1 mt-1"><AlertTriangle size={10} /> Relance (+48h)</span>}
+                {processedInbox.map(item => {
+                  const alert = getRelanceAlert(item.lastFollowUp);
+                  return (
+                    <div 
+                        key={item.id} 
+                        onClick={() => setViewingInboxItem(item)} // ✅ Clic active le panneau détail
+                        className={`p-4 rounded-2xl border cursor-pointer transition-all flex justify-between items-center 
+                            ${viewingInboxItem?.id === item.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'bg-white dark:bg-slate-800 border-slate-100 hover:border-indigo-300'}
+                        `}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-xl ${item.source === 'email' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                            {item.source === 'email' ? <Mail size={18} /> : <Phone size={18} />}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm">{item.contactName} <span className="text-slate-400 font-medium">{item.companyName ? `(${item.companyName})` : ''}</span></h4>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Reçu le {new Date(item.requestDate).toLocaleDateString()}</p>
+                          
+                          <div className="flex gap-2 mt-1">
+                              {/* Badge Statut Traitement */}
+                              <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                                  item.processingStatus === 'finished' ? 'bg-emerald-100 text-emerald-700' : 
+                                  item.processingStatus === 'in_progress' ? 'bg-orange-100 text-orange-700' : 
+                                  'bg-slate-100 text-slate-500'
+                              }`}>
+                                  {item.processingStatus === 'finished' ? 'Terminé' : item.processingStatus === 'in_progress' ? 'En cours' : 'Pas commencé'}
+                              </span>
+
+                              {/* Alerte Relance */}
+                              {alert && (
+                                <span className="text-[8px] font-black text-red-500 flex items-center gap-1">
+                                    <AlertTriangle size={10} /> {alert.label}
+                                </span>
+                              )}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-slate-300"/>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* PANNEAU DROITE : DÉTAIL OU SAISIE RAPIDE */}
+            <div className={`w-full md:w-1/3 p-6 rounded-[32px] border overflow-y-auto ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
+              
+              {viewingInboxItem ? (
+                // --- MODE FICHE DÉTAIL ---
+                <div className="space-y-6 animate-in slide-in-from-right-5">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h3 className="text-lg font-black uppercase text-indigo-600">Détails Demande</h3>
+                            <p className="text-xs text-slate-400 font-bold">Créée le {new Date(viewingInboxItem.requestDate).toLocaleDateString()}</p>
+                        </div>
+                        <button onClick={() => setViewingInboxItem(null)} className="p-2 hover:bg-slate-100 rounded-full"><X size={16}/></button>
+                    </div>
+
+                    {/* ACTIONS RAPIDES (SMS/WHATSAPP) */}
+                    <div className="flex gap-2">
+                        <button onClick={() => openSMS(viewingInboxItem.phone, "")} className="flex-1 py-2 bg-slate-100 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-200">
+                            <Briefcase size={14}/> SMS
+                        </button>
+                        <button onClick={() => openWhatsApp(viewingInboxItem.phone, "")} className="flex-1 py-2 bg-emerald-50 rounded-lg text-emerald-600 text-xs font-bold flex items-center justify-center gap-2 hover:bg-emerald-100">
+                            <Phone size={14}/> WhatsApp
+                        </button>
+                    </div>
+
+                    {/* CHAMPS DE TRAITEMENT */}
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Responsable</label>
+                            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-transparent focus-within:border-indigo-500">
+                                <UserCheck size={16} className="text-slate-400"/>
+                                <input 
+                                    type="text" 
+                                    placeholder="Qui gère ?" 
+                                    className="bg-transparent outline-none text-xs font-bold w-full"
+                                    value={viewingInboxItem.assignee || ''}
+                                    onChange={(e) => handleUpdateInboxItem({ ...viewingInboxItem, assignee: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Statut Traitement</label>
+                            <select 
+                                className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none"
+                                value={viewingInboxItem.processingStatus || 'not_started'}
+                                onChange={(e) => handleUpdateInboxItem({ ...viewingInboxItem, processingStatus: e.target.value as any })}
+                            >
+                                <option value="not_started">⚪ Pas commencé</option>
+                                <option value="in_progress">🟠 En cours</option>
+                                <option value="finished">🟢 Terminé</option>
+                            </select>
+                        </div>
+
+                        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-900 cursor-pointer" onClick={() => handleUpdateInboxItem({ ...viewingInboxItem, quoteSent: !viewingInboxItem.quoteSent })}>
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${viewingInboxItem.quoteSent ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
+                                {viewingInboxItem.quoteSent && <Check size={12} className="text-white"/>}
+                            </div>
+                            <span className="text-xs font-bold">Devis envoyé au client</span>
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1 flex justify-between">
+                                <span>Date de Relance</span>
+                                {getRelanceAlert(viewingInboxItem.lastFollowUp) && <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10}/> {getRelanceAlert(viewingInboxItem.lastFollowUp)?.label}</span>}
+                            </label>
+                            <input 
+                                type="date" 
+                                className={`w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none border ${getRelanceAlert(viewingInboxItem.lastFollowUp) ? 'border-red-300' : 'border-transparent'}`}
+                                value={viewingInboxItem.lastFollowUp || ''}
+                                onChange={(e) => handleUpdateInboxItem({ ...viewingInboxItem, lastFollowUp: e.target.value })}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Notes</label>
+                            <textarea 
+                                className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-medium outline-none resize-none h-24"
+                                placeholder="Notes sur la demande..."
+                                value={viewingInboxItem.note || ''}
+                                onChange={(e) => handleUpdateInboxItem({ ...viewingInboxItem, note: e.target.value })}
+                            />
+                        </div>
+                    </div>
+
+                    <hr className="border-slate-100 dark:border-slate-700"/>
+
+                    {/* BOUTONS ACTIONS FINALES */}
+                    <div className="space-y-2">
+                        <button 
+                            onClick={() => handleValidateRequest(viewingInboxItem)}
+                            className="w-full py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase shadow-lg hover:bg-indigo-700 flex items-center justify-center gap-2"
+                        >
+                            <CheckCircle2 size={16}/> Convertir en Lead (Pipeline)
+                        </button>
+                        
+                        <button 
+                            onClick={() => handleArchiveInboxRequest(viewingInboxItem.id)}
+                            className="w-full py-3 bg-slate-100 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 transition-colors"
+                        >
+                            <Archive size={16}/> Archiver (Non abouti)
+                        </button>
+                    </div>
+                </div>
+              ) : (
+                // --- MODE SAISIE RAPIDE (Par défaut) ---
+                <div className="space-y-4">
+                    <h3 className="text-lg font-black uppercase mb-4">Saisie Rapide</h3>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
+                      <select 
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none"
+                        value={selectedInboxVipId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setSelectedInboxVipId(id);
+                          const c = appContacts.find((x: any) => String(x.id) === id);
+                          if (c) {
+                            setInboxForm({
+                              ...inboxForm,
+                              contactName: c.name,
+                              companyName: c.company || c.companyName || '',
+                              email: c.email || '',
+                              phone: c.phone || ''
+                            });
+                          }
+                        }}
+                      >
+                        <option value="">— Sélectionner —</option>
+                        {vipCandidates.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.name} {c.company ? `• ${c.company}` : ''}</option>
+                        ))}
+                      </select>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => { /* ... */ }} className="flex-1 py-2 rounded-lg border text-[10px] font-black uppercase hover:bg-slate-100">SMS</button>
+                        <button type="button" onClick={() => { /* ... */ }} className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase hover:bg-emerald-700">WhatsApp</button>
                       </div>
                     </div>
-                    {/* BOUTONS ACTIONS RAPIDES INBOX */}
-                    <div className="flex gap-2 mr-4">
-                      <button onClick={() => openSMS(item.phone, buildMessage({ contactName: item.contactName, sourceLabel: 'Inbox' }))} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600" title="SMS"><Briefcase size={14} /></button>
-                      <button onClick={() => openWhatsApp(item.phone, buildMessage({ contactName: item.contactName, sourceLabel: 'Inbox' }))} className="p-2 bg-emerald-100 hover:bg-emerald-200 rounded-lg text-emerald-600" title="WhatsApp"><Phone size={14} /></button>
+                    <input type="text" placeholder="Nom Contact *" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.contactName} onChange={(e) => setInboxForm({ ...inboxForm, contactName: e.target.value })} />
+                    <input type="text" placeholder="Entreprise" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.companyName} onChange={(e) => setInboxForm({ ...inboxForm, companyName: e.target.value })} />
+                    <input type="email" placeholder="Email" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.email} onChange={(e) => setInboxForm({ ...inboxForm, email: e.target.value })} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="date" className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold" value={inboxForm.eventStartDate} onChange={(e) => setInboxForm({ ...inboxForm, eventStartDate: e.target.value })} />
+                      <input type="date" className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold" value={inboxForm.eventEndDate} onChange={(e) => setInboxForm({ ...inboxForm, eventEndDate: e.target.value })} />
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleValidateRequest(item)} className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase shadow hover:bg-emerald-600 transition-colors">Valider</button>
-                      <button onClick={() => handleArchiveRequest(item.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><XCircle size={18} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    <RoomsInputs compact value={inboxForm.rooms} onChange={(next) => setInboxForm({ ...inboxForm, rooms: next })} />
+                    <button onClick={() => { onUpdateInbox?.([ { ...inboxForm, id: uid('inbox'), status: 'to_process', processingStatus: 'not_started', requestDate: new Date().toISOString() }, ...inbox ]); setInboxForm({ contactName: '', companyName: '', email: '', phone: '', source: 'email', rooms: defaultRooms() }); setSelectedInboxVipId(''); }} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 transition-all">Enregistrer Demande</button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -645,147 +714,51 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         {activeTab === 'contacts' && (
           <div className="h-full overflow-y-auto p-4 md:px-6 pb-20 no-scrollbar relative">
             <div className="flex gap-4 mb-4">
-              {/* Barre de recherche contacts */}
               <div className="flex-1 flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border border-transparent focus-within:border-indigo-500 transition-all">
                  <Search size={18} className="text-slate-400 mr-3" />
-                 <input 
-                   type="text" 
-                   placeholder="Rechercher un contact..." 
-                   value={contactSearch}
-                   onChange={(e) => setContactSearch(e.target.value)}
-                   className="bg-transparent outline-none w-full text-sm font-bold text-slate-700 dark:text-white"
-                 />
+                 <input type="text" placeholder="Rechercher un contact..." value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} className="bg-transparent outline-none w-full text-sm font-bold text-slate-700 dark:text-white" />
               </div>
-              
-              {/* ✅ NOUVEAU BOUTON EXPORT CONTACTS */}
-              <button 
-                onClick={handleExportContactsCSV} 
-                className="px-6 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:opacity-90 transition-opacity"
-              >
+              <button onClick={handleExportContactsCSV} className="px-6 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:opacity-90 transition-opacity">
                 <Download size={16} /> Exporter
               </button>
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredGridContacts.map((contact: any) => (
-                <div 
-                  key={contact.id} 
-                  onClick={() => setViewingContact(contact)}
-                  className={`p-4 rounded-2xl border flex items-center gap-4 transition-all hover:shadow-md cursor-pointer ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-100 shadow-sm hover:bg-slate-50'}`}
-                >
-                   {/* Avatar/Initials */}
-                   <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${contact.color || 'bg-slate-200 text-slate-500'}`}>
-                      {contact.initials || contact.name.slice(0, 2).toUpperCase()}
-                   </div>
-                   
-                   {/* Info */}
+                <div key={contact.id} onClick={() => setViewingContact(contact)} className={`p-4 rounded-2xl border flex items-center gap-4 transition-all hover:shadow-md cursor-pointer ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-100 shadow-sm hover:bg-slate-50'}`}>
+                   <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${contact.color || 'bg-slate-200 text-slate-500'}`}>{contact.initials || contact.name.slice(0, 2).toUpperCase()}</div>
                    <div className="flex-1 min-w-0">
                       <h4 className="font-bold text-sm truncate">{contact.name}</h4>
                       <p className="text-xs text-slate-400 truncate font-medium uppercase tracking-wide">{contact.company || contact.companyName || 'Particulier'}</p>
-                      
-                      {/* Action buttons */}
                       <div className="flex gap-2 mt-2">
-                         {contact.phone && (
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); openSMS(contact.phone, ''); }} 
-                             className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 transition-colors"
-                             title="SMS"
-                           >
-                             <Briefcase size={14}/>
-                           </button>
-                         )}
-                         {contact.phone && (
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); openWhatsApp(contact.phone, ''); }} 
-                             className="p-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 transition-colors"
-                             title="WhatsApp"
-                           >
-                             <Phone size={14}/>
-                           </button>
-                         )}
-                         {contact.email && (
-                           <a 
-                             href={`mailto:${contact.email}`}
-                             onClick={(e) => e.stopPropagation()}
-                             className="p-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 transition-colors"
-                             title="Email"
-                           >
-                             <Mail size={14}/>
-                           </a>
-                         )}
+                         {contact.phone && <button onClick={(e) => { e.stopPropagation(); openSMS(contact.phone, ''); }} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600"><Briefcase size={14}/></button>}
+                         {contact.phone && <button onClick={(e) => { e.stopPropagation(); openWhatsApp(contact.phone, ''); }} className="p-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600"><Phone size={14}/></button>}
+                         {contact.email && <a href={`mailto:${contact.email}`} onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600"><Mail size={14}/></a>}
                       </div>
                    </div>
                 </div>
               ))}
-              {filteredGridContacts.length === 0 && (
-                <div className="col-span-full text-center py-10 opacity-50">
-                  <Users size={48} className="mx-auto mb-2 text-slate-300"/>
-                  <p className="text-sm font-bold text-slate-400">Aucun contact trouvé.</p>
-                </div>
-              )}
             </div>
-
-            {/* MODAL DETAIL CONTACT */}
             {viewingContact && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
                 <div className={`w-full max-w-lg rounded-[32px] p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto no-scrollbar ${userSettings.darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
-                   <button 
-                     onClick={() => setViewingContact(null)} 
-                     className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"
-                   >
-                     <X size={20}/>
-                   </button>
-
+                   <button onClick={() => setViewingContact(null)} className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"><X size={20}/></button>
                    <div className="flex flex-col items-center mb-6">
-                      <div className={`w-20 h-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-md mb-3 ${viewingContact.color || 'bg-slate-200 text-slate-500'}`}>
-                        {viewingContact.initials || viewingContact.name.slice(0, 2).toUpperCase()}
-                      </div>
+                      <div className={`w-20 h-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-md mb-3 ${viewingContact.color || 'bg-slate-200 text-slate-500'}`}>{viewingContact.initials || viewingContact.name.slice(0, 2).toUpperCase()}</div>
                       <h3 className="text-xl font-black">{viewingContact.name}</h3>
                       <p className="text-sm text-slate-400 font-bold uppercase">{viewingContact.company || viewingContact.companyName || 'Particulier'}</p>
                    </div>
-
-                   {/* Stats */}
                    <div className="grid grid-cols-2 gap-4 mb-6">
-                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
-                         <span className="text-2xl font-black text-indigo-600 block">{getContactHistory(viewingContact).total}</span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Totaux</span>
-                      </div>
-                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
-                         <span className="text-2xl font-black text-emerald-500 block">{getContactHistory(viewingContact).validated}</span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Validés</span>
-                      </div>
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center"><span className="text-2xl font-black text-indigo-600 block">{getContactHistory(viewingContact).total}</span><span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Totaux</span></div>
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center"><span className="text-2xl font-black text-emerald-500 block">{getContactHistory(viewingContact).validated}</span><span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Validés</span></div>
                    </div>
-
-                   {/* Infos */}
-                   <div className="space-y-3 mb-6">
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                         <Phone size={18} className="text-slate-400"/>
-                         <span className="font-bold text-sm">{viewingContact.phone || '-'}</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                         <Mail size={18} className="text-slate-400"/>
-                         <span className="font-bold text-sm">{viewingContact.email || '-'}</span>
-                      </div>
-                   </div>
-
-                   {/* Historique */}
                    <h4 className="font-black text-sm uppercase text-slate-400 mb-3 ml-1">Historique Récent</h4>
                    <div className="space-y-2">
-                      {getContactHistory(viewingContact).history.length > 0 ? (
-                        getContactHistory(viewingContact).history.map((lead: Lead) => (
+                      {getContactHistory(viewingContact).history.map((lead: Lead) => (
                           <div key={lead.id} className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                             <div>
-                                <p className="font-bold text-xs">{lead.groupName}</p>
-                                <p className="text-[10px] text-slate-400">{new Date(lead.requestDate).toLocaleDateString()}</p>
-                             </div>
-                             <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${lead.status === 'valide' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                                {lead.status}
-                             </span>
+                             <div><p className="font-bold text-xs">{lead.groupName}</p><p className="text-[10px] text-slate-400">{new Date(lead.requestDate).toLocaleDateString()}</p></div>
+                             <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${lead.status === 'valide' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{lead.status}</span>
                           </div>
-                        ))
-                      ) : (
-                        <p className="text-center text-xs text-slate-400 italic py-4">Aucun historique de dossier.</p>
-                      )}
+                      ))}
                    </div>
                 </div>
               </div>
@@ -797,44 +770,23 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
           <div className="w-full h-full flex flex-col p-6">
              <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-black">Historique & Archives</h3>
-                <button onClick={handleExportCSV} className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700">
-                  <Download size={16} /> Exporter Excel
-                </button>
+                <button onClick={handleExportCSV} className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700"><Download size={16} /> Exporter Excel</button>
              </div>
-             
-             {/* LISTE DES DOSSIERS ARCHIVÉS */}
              <div className="flex-1 rounded-[32px] border bg-white dark:bg-slate-800 p-4 overflow-auto no-scrollbar">
                 {archivedLeads.length > 0 ? (
                   <div className="space-y-3">
                     {archivedLeads.map(lead => (
                       <div key={lead.id} className="p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 flex justify-between items-center opacity-75 hover:opacity-100 transition-opacity">
-                         <div>
-                            <h4 className="font-bold text-sm">{lead.groupName}</h4>
-                            <p className="text-xs text-slate-500">{lead.contactName} • {new Date(lead.requestDate).toLocaleDateString()}</p>
-                         </div>
+                         <div><h4 className="font-bold text-sm">{lead.groupName}</h4><p className="text-xs text-slate-500">{lead.contactName} • {new Date(lead.requestDate).toLocaleDateString()}</p></div>
                          <div className="flex gap-2">
-                            <button 
-                              onClick={() => handleRestoreLead(lead)} 
-                              className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-xs font-bold uppercase flex items-center gap-1 hover:bg-blue-200"
-                            >
-                              <RotateCcw size={14}/> Restaurer
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteDefinitely(lead.id)} 
-                              className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Supprimer définitivement"
-                            >
-                              <Trash2 size={16}/>
-                            </button>
+                            <button onClick={() => handleRestoreLead(lead)} className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-xs font-bold uppercase flex items-center gap-1 hover:bg-blue-200"><RotateCcw size={14}/> Restaurer</button>
+                            <button onClick={() => handleDeleteDefinitely(lead.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16}/></button>
                          </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center opacity-30">
-                    <FolderOpen size={48} className="mb-4 text-slate-400"/>
-                    <p className="text-center text-slate-400 font-bold">Aucun dossier archivé.</p>
-                  </div>
+                  <div className="h-full flex flex-col items-center justify-center opacity-30"><FolderOpen size={48} className="mb-4 text-slate-400"/><p className="text-center text-slate-400 font-bold">Aucun dossier archivé.</p></div>
                 )}
              </div>
           </div>
@@ -845,96 +797,22 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
           <div className="w-full max-w-2xl mx-auto overflow-y-auto no-scrollbar py-6">
             <div className={`p-8 rounded-[40px] border shadow-sm space-y-6 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
               <h3 className="text-2xl font-black uppercase tracking-tight">Qualifier une demande</h3>
-              
-              {/* BOUTONS SMS / WHATSAPP */}
               <div className="space-y-4">
-                {/* SÉLECTEUR DE CONTACT */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
-                  <select 
-                    className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-sm"
-                    value={selectedVipId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedVipId(id);
-                      const c = appContacts.find((x: any) => String(x.id) === id);
-                      if (c) {
-                        setForm({
-                          ...form,
-                          contactName: c.name,
-                          email: c.email || '',
-                          phone: c.phone || ''
-                        });
-                      }
-                    }}
-                  >
+                  <select className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-sm" value={selectedVipId} onChange={(e) => { const id = e.target.value; setSelectedVipId(id); const c = appContacts.find((x: any) => String(x.id) === id); if (c) { setForm({ ...form, contactName: c.name, email: c.email || '', phone: c.phone || '' }); } }}>
                     <option value="">— Sélectionner —</option>
-                    {vipCandidates.map((c: any) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.company ? `• ${c.company}` : ''}
-                      </option>
-                    ))}
+                    {vipCandidates.map((c: any) => (<option key={c.id} value={c.id}>{c.name} {c.company ? `• ${c.company}` : ''}</option>))}
                   </select>
                 </div>
-
                 <div className="flex gap-2 pb-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const msg = buildMessage({
-                        groupName: form.groupName,
-                        contactName: form.contactName,
-                        email: form.email,
-                        phone: form.phone,
-                        startDate: form.startDate,
-                        endDate: form.endDate,
-                        pax: form.pax,
-                        rooms: form.rooms,
-                        note: form.note,
-                        sourceLabel: 'Nouveau Lead'
-                      });
-                      openSMS(form.phone, msg);
-                    }}
-                    className="flex-1 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-black text-xs uppercase hover:bg-slate-100 transition-colors"
-                  >
-                    SMS
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const msg = buildMessage({
-                        groupName: form.groupName,
-                        contactName: form.contactName,
-                        email: form.email,
-                        phone: form.phone,
-                        startDate: form.startDate,
-                        endDate: form.endDate,
-                        pax: form.pax,
-                        rooms: form.rooms,
-                        note: form.note,
-                        sourceLabel: 'Nouveau Lead'
-                      });
-                      openWhatsApp(form.phone, msg);
-                    }}
-                    className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-700 transition-colors"
-                  >
-                    WhatsApp
-                  </button>
+                  <button type="button" onClick={() => { const msg = buildMessage({ groupName: form.groupName, contactName: form.contactName, email: form.email, phone: form.phone, startDate: form.startDate, endDate: form.endDate, pax: form.pax, rooms: form.rooms, note: form.note, sourceLabel: 'Nouveau Lead' }); openSMS(form.phone, msg); }} className="flex-1 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-black text-xs uppercase hover:bg-slate-100 transition-colors">SMS</button>
+                  <button type="button" onClick={() => { const msg = buildMessage({ groupName: form.groupName, contactName: form.contactName, email: form.email, phone: form.phone, startDate: form.startDate, endDate: form.endDate, pax: form.pax, rooms: form.rooms, note: form.note, sourceLabel: 'Nouveau Lead' }); openWhatsApp(form.phone, msg); }} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-700 transition-colors">WhatsApp</button>
                 </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nom du Groupe *</label>
-                  <input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" placeholder="Ex: Mariage Durand" value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })} />
-                </div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nom du Groupe *</label><input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" placeholder="Ex: Mariage Durand" value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })} /></div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact Principal *</label>
-                    <input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">PAX Prévu</label>
-                    <input type="number" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={form.pax} onChange={(e) => setForm({ ...form, pax: parseInt(e.target.value) || 0 })} />
-                  </div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact Principal *</label><input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} /></div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1">PAX Prévu</label><input type="number" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={form.pax} onChange={(e) => setForm({ ...form, pax: parseInt(e.target.value) || 0 })} /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <input type="date" className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={toDateInputValue(form.startDate)} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
