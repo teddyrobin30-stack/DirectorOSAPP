@@ -432,8 +432,19 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
                   <textarea className="flex-1 w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl outline-none text-sm font-medium resize-none" value={selectedLead.note} onChange={(e) => handleUpdateLead({ ...selectedLead, note: e.target.value })} placeholder="Notes internes et historique..." />
                   
+                  {/* BOUTON SUPPRIMER CORRIGÉ */}
                   <div className="pt-6 flex justify-end">
-                    <button onClick={() => onUpdateLeads(leads.filter(l => l.id !== selectedLead.id))} className="text-red-400 hover:text-red-600 text-xs font-black uppercase flex items-center gap-2"><Trash2 size={14} /> Supprimer le dossier</button>
+                    <button 
+                      onClick={() => {
+                        if (window.confirm('Êtes-vous sûr de vouloir supprimer ce dossier ?')) {
+                          onUpdateLeads(leads.filter(l => l.id !== selectedLead.id));
+                          setSelectedLead(null);
+                        }
+                      }}
+                      className="text-red-400 hover:text-red-600 text-xs font-black uppercase flex items-center gap-2"
+                    >
+                      <Trash2 size={14} /> Supprimer le dossier
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -487,6 +498,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
+                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
@@ -508,6 +520,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button
                       type="button"
                       onClick={() => {
+                        // PRIORITÉ : Contact Base de Données, sinon Formulaire
                         const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
                           groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
