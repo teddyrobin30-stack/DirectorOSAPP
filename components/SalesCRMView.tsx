@@ -1107,10 +1107,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         onClose={() => setEditingInboxItem(null)} 
         onSave={handleSaveInboxItem} 
       />
-
-  </div>
-      )}
-
+  
       {/* MODAL FICHE DOSSIER */}
       <InboxDetailPanel 
         isOpen={!!editingInboxItem} 
