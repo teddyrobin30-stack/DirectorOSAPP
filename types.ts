@@ -12,6 +12,9 @@ export type DashboardWidgetId =
   | 'sales_pulse'
   | 'active_groups'
   | 'tasks_focus';
+  | 'housekeeping_status'
+  | 'maintenance_alerts'
+  | 'inventory_alerts';
 
 export type DashboardWidgetSize = 'sm' | 'md' | 'lg';
 
