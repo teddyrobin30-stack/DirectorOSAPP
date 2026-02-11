@@ -356,9 +356,6 @@ const AuthenticatedApp: React.FC = () => {
         groups={user.permissions.canViewSharedData ? groups : []}
         leads={leads}
         inbox={inbox}
-        rooms={rooms}
-        tickets={tickets}
-        inventory={inventory}
         onNavigate={(path) => navigate(path)}
         onTaskToggle={(id) =>
           handleTaskStatusChange(

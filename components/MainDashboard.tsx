@@ -17,15 +17,8 @@ import {
   X,
   ArrowUp,
   ArrowDown,
-  // ✅ Icônes ajoutées
-  BedDouble,
-  Wrench,
-  Package,
-  Calendar,
-  Plus,
-  CheckCircle2
+  Calendar
 } from 'lucide-react';
-
 import type {
   UserSettings,
   CalendarEvent,
@@ -35,23 +28,16 @@ import type {
   Lead,
   InboxItem,
   DashboardWidgetConfig,
-  Room,
-  MaintenanceTicket,
-  InventoryItem
 } from '../types';
 
 interface MainDashboardProps {
   userSettings: UserSettings;
-  // On met les types en optionnel (?) pour éviter les erreurs de typage strict
   events?: CalendarEvent[];
   todos?: Task[];
   contacts?: Contact[];
   groups?: Group[];
   leads?: Lead[];
   inbox?: InboxItem[];
-  rooms?: Room[];
-  tickets?: MaintenanceTicket[];
-  inventory?: InventoryItem[];
 
   onNavigate: (tab: string) => void;
   onTaskToggle: (id: string | number) => void;
@@ -70,10 +56,7 @@ type WidgetId =
   | 'agenda_today'
   | 'sales_pulse'
   | 'active_groups'
-  | 'tasks_focus'
-  | 'housekeeping_status'
-  | 'maintenance_alerts'
-  | 'inventory_alerts';
+  | 'tasks_focus';
 
 const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   { id: 'quick_actions', enabled: true, order: 10, size: 'md' },
@@ -81,9 +64,6 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   { id: 'sales_pulse', enabled: true, order: 30, size: 'md' },
   { id: 'active_groups', enabled: true, order: 40, size: 'md' },
   { id: 'tasks_focus', enabled: true, order: 50, size: 'md' },
-  { id: 'housekeeping_status', enabled: true, order: 60, size: 'sm' },
-  { id: 'maintenance_alerts', enabled: true, order: 70, size: 'sm' },
-  { id: 'inventory_alerts', enabled: true, order: 80, size: 'sm' },
 ];
 
 const clampOrder = (n: number) => (Number.isFinite(n) ? n : 999);
@@ -102,6 +82,7 @@ const normalizeWidgets = (widgets?: DashboardWidgetConfig[]) => {
     });
   }
 
+  // add missing defaults
   for (const d of DEFAULT_WIDGETS) {
     if (!map.has(d.id)) map.set(d.id, d);
   }
@@ -132,9 +113,6 @@ const titleByWidget: Record<WidgetId, string> = {
   sales_pulse: 'Performance commerciale',
   active_groups: 'Groupes en maison',
   tasks_focus: 'Priorités',
-  housekeeping_status: 'Hébergement',
-  maintenance_alerts: 'Maintenance',
-  inventory_alerts: 'Stocks F&B',
 };
 
 const descByWidget: Record<WidgetId, string> = {
@@ -143,9 +121,6 @@ const descByWidget: Record<WidgetId, string> = {
   sales_pulse: 'KPI & relances rapides',
   active_groups: 'Groupes actuellement sur place',
   tasks_focus: 'Vos tâches à traiter',
-  housekeeping_status: 'État des chambres (Propre/Sale)',
-  maintenance_alerts: 'Tickets ouverts et urgences',
-  inventory_alerts: 'Alertes de rupture de stock',
 };
 
 const sizeLabel: Record<NonNullable<DashboardWidgetConfig['size']>, string> = {
@@ -154,104 +129,15 @@ const sizeLabel: Record<NonNullable<DashboardWidgetConfig['size']>, string> = {
   lg: 'Large',
 };
 
-// --- SOUS-COMPOSANTS ---
-
-const HousekeepingWidget = ({ rooms, onClick, darkMode }: { rooms: Room[], onClick: () => void, darkMode: boolean }) => {
-  const stats = useMemo(() => {
-    const safeRooms = Array.isArray(rooms) ? rooms : [];
-    const total = safeRooms.length || 1;
-    const clean = safeRooms.filter(r => r.statusHK === 'ready').length;
-    const dirty = safeRooms.filter(r => r.statusHK === 'not_started').length;
-    const progress = safeRooms.filter(r => r.statusHK === 'in_progress').length;
-    return { clean, dirty, progress, percent: Math.round((clean / total) * 100) };
-  }, [rooms]);
-
-  return (
-    <div onClick={onClick} className={`p-5 rounded-3xl shadow-sm border cursor-pointer hover:shadow-md transition-all group h-full flex flex-col justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-      <div className="flex justify-between items-start mb-2">
-        <div className="p-2.5 bg-rose-100 text-rose-600 rounded-xl dark:bg-rose-900/30 dark:text-rose-400">
-          <BedDouble size={20} />
-        </div>
-        <span className="text-xs font-bold bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full text-slate-500">{stats.percent}%</span>
-      </div>
-      <div>
-        <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-1">Hébergement</h3>
-        <div className="flex items-center gap-1 mb-2">
-           <span className={`text-2xl font-black ${darkMode ? 'text-white' : 'text-slate-900'}`}>{stats.dirty}</span>
-           <span className="text-xs text-slate-400 font-medium">à faire</span>
-        </div>
-        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex">
-          <div className="bg-emerald-500 h-full" style={{ width: `${(stats.clean / (rooms.length || 1)) * 100}%` }} />
-          <div className="bg-amber-400 h-full" style={{ width: `${(stats.progress / (rooms.length || 1)) * 100}%` }} />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const MaintenanceWidget = ({ tickets, onClick, darkMode }: { tickets: MaintenanceTicket[], onClick: () => void, darkMode: boolean }) => {
-  const urgent = (tickets || []).filter(t => t.status === 'open').length;
-  
-  return (
-    <div onClick={onClick} className={`p-5 rounded-3xl shadow-sm border cursor-pointer hover:shadow-md transition-all group h-full flex flex-col justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-      <div className="flex justify-between items-start mb-2">
-        <div className="p-2.5 bg-amber-100 text-amber-600 rounded-xl dark:bg-amber-900/30 dark:text-amber-400">
-          <Wrench size={20} />
-        </div>
-        {urgent > 0 && <span className="flex h-3 w-3 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>}
-      </div>
-      <div>
-        <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-1">Maintenance</h3>
-        <div className="flex items-end gap-2">
-           <span className={`text-2xl font-black ${darkMode ? 'text-white' : 'text-slate-900'}`}>{urgent}</span>
-           <span className="text-xs text-slate-400 font-medium mb-1">tickets</span>
-        </div>
-        <p className="text-[10px] text-slate-400 mt-1 line-clamp-1">
-          {urgent > 0 ? "Interventions requises" : "Aucun problème"}
-        </p>
-      </div>
-    </div>
-  );
-};
-
-const InventoryWidget = ({ inventory, onClick, darkMode }: { inventory: InventoryItem[], onClick: () => void, darkMode: boolean }) => {
-  const lowStock = (inventory || []).filter(i => i.currentQty <= 5).length;
-
-  return (
-    <div onClick={onClick} className={`p-5 rounded-3xl shadow-sm border cursor-pointer hover:shadow-md transition-all group h-full flex flex-col justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-      <div className="flex justify-between items-start mb-2">
-        <div className="p-2.5 bg-violet-100 text-violet-600 rounded-xl dark:bg-violet-900/30 dark:text-violet-400">
-          <Package size={20} />
-        </div>
-      </div>
-      <div>
-        <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-1">Stocks F&B</h3>
-        <div className="flex items-end gap-2">
-           <span className={`text-2xl font-black ${lowStock > 0 ? 'text-red-500' : (darkMode ? 'text-white' : 'text-slate-900')}`}>{lowStock}</span>
-           <span className="text-xs text-slate-400 font-medium mb-1">alertes</span>
-        </div>
-        <p className="text-[10px] text-slate-400 mt-1">
-          {lowStock > 0 ? "Réapprovisionner" : "Stocks sains"}
-        </p>
-      </div>
-    </div>
-  );
-};
-
-
 const MainDashboard: React.FC<MainDashboardProps> = ({
   userSettings,
-  // ✅ CORRECTION CRITIQUE : Initialisation par défaut à []
+  // ✅ SÉCURITÉ : Initialisation à [] pour éviter l'écran blanc
   events = [],
   todos = [],
   contacts = [],
   groups = [],
   leads = [],
   inbox = [],
-  rooms = [],
-  tickets = [],
-  inventory = [],
-  
   onNavigate,
   onTaskToggle,
   onTaskClick,
@@ -262,7 +148,6 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   onOpenContactModal,
   onSaveDashboardWidgets,
 }) => {
-  
   const today = useMemo(() => new Date(), []);
   const theme = userSettings.themeColor || 'indigo';
 
@@ -294,7 +179,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
     return { pipeline, newRequests, urgentAction };
   }, [leads, inbox, today]);
 
-  // Widgets config (live from settings)
+  // Widgets config
   const initialWidgets = useMemo(
     () => normalizeWidgets(userSettings.dashboardWidgets),
     [userSettings.dashboardWidgets]
@@ -303,12 +188,10 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   const [editMode, setEditMode] = useState(false);
   const [widgetsDraft, setWidgetsDraft] = useState<DashboardWidgetConfig[]>(initialWidgets);
 
-  // keep draft in sync when settings update (but don't overwrite while editing)
   useEffect(() => {
     if (!editMode) setWidgetsDraft(initialWidgets);
   }, [initialWidgets, editMode]);
 
-  // drag n drop
   const dragIdRef = useRef<string | null>(null);
 
   const sortedEnabledWidgets = useMemo(() => {
@@ -317,7 +200,6 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
 
   const persistWidgets = (next: DashboardWidgetConfig[]) => {
     setWidgetsDraft(next);
-    // ✅ safe call (évite crash si la prop n’est pas passée)
     onSaveDashboardWidgets?.(next);
   };
 
@@ -365,7 +247,6 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
     const [item] = moved.splice(from, 1);
     moved.splice(to, 0, item);
 
-    // reassign orders in steps of 10
     const next = moved.map((w, i) => ({ ...w, order: (i + 1) * 10 }));
     persistWidgets(next);
   };
@@ -391,12 +272,11 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      <div className="grid grid-cols-3 gap-3 md:gap-4">
         {[
           { icon: CalendarPlus, label: 'RDV', color: themeLight, onClick: onOpenEventModal },
           { icon: CheckSquare, label: 'Tâche', color: 'bg-emerald-50 text-emerald-600', onClick: onOpenTaskModal },
           { icon: UserPlus, label: 'Contact', color: 'bg-amber-50 text-amber-600', onClick: onOpenContactModal },
-          { icon: Plus, label: 'Lead', color: 'bg-blue-50 text-blue-600', onClick: () => onNavigate('/groups') },
         ].map((btn, i) => (
           <button
             key={i}
@@ -420,7 +300,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   );
 
   const WidgetAgendaToday = () => (
-    <section className="flex flex-col h-full">
+    <section className="flex flex-col">
       <div className="flex justify-between items-end mb-4 px-1">
         <div>
           <h2 className="text-sm font-black uppercase tracking-widest opacity-60">Agenda du jour</h2>
@@ -451,7 +331,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
               </div>
 
               <div className="flex-1 min-w-0">
-                <h3 className={`font-black text-sm leading-snug truncate ${userSettings.darkMode ? 'text-slate-200' : 'text-slate-800'}`}>{evt.title}</h3>
+                <h3 className="font-black text-sm leading-snug truncate">{evt.title}</h3>
 
                 {evt.linkedContactId && (
                   <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 truncate">
@@ -496,7 +376,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   );
 
   const WidgetSalesPulse = () => (
-    <section className="flex flex-col h-full">
+    <section className="flex flex-col">
       <div className="flex justify-between items-end mb-4 px-1">
         <div>
           <h2 className="text-sm font-black uppercase tracking-widest opacity-60">Performance commerciale</h2>
@@ -508,7 +388,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
       </div>
 
       <div
-        className={`p-5 rounded-[28px] border shadow-sm h-full flex flex-col justify-between ${
+        className={`p-5 rounded-[28px] border shadow-sm ${
           userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'
         }`}
       >
@@ -576,7 +456,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   );
 
   const WidgetActiveGroups = () => (
-    <section className="flex flex-col h-full">
+    <section className="flex flex-col">
       <div className="flex justify-between items-end mb-4 px-1">
         <div>
           <h2 className="text-sm font-black uppercase tracking-widest opacity-60">Groupes en maison</h2>
@@ -598,7 +478,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
               }`}
             >
               <div className="flex-1 min-w-0">
-                <h3 className={`font-black text-xs leading-snug truncate ${userSettings.darkMode ? 'text-slate-200' : 'text-slate-800'}`}>{group.name}</h3>
+                <h3 className="font-black text-xs leading-snug truncate">{group.name}</h3>
                 <p className="text-[10px] text-slate-400 mt-0.5">
                   {group.pax} PAX • {group.category}
                 </p>
@@ -619,7 +499,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   );
 
   const WidgetTasksFocus = () => (
-    <section className="flex flex-col h-full">
+    <section className="flex flex-col">
       <div className="flex justify-between items-end mb-4 px-1">
         <div>
           <h2 className="text-sm font-black uppercase tracking-widest opacity-60">Priorités</h2>
@@ -649,7 +529,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
             </button>
 
             <div className="flex-1 cursor-pointer min-w-0" onClick={() => onTaskClick(task)}>
-              <p className={`text-sm font-bold truncate ${userSettings.darkMode ? 'text-slate-200' : 'text-slate-800'} ${task.done ? 'line-through opacity-40' : ''}`}>
+              <p className={`text-sm font-bold truncate ${task.done ? 'line-through opacity-40' : ''}`}>
                 {task.text}
               </p>
               <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md mt-1 inline-block ${themeBadge}`}>
@@ -676,19 +556,22 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
 
   const renderWidget = (id: string) => {
     switch (id as WidgetId) {
-      case 'quick_actions': return <WidgetQuickActions />;
-      case 'agenda_today': return <WidgetAgendaToday />;
-      case 'sales_pulse': return <WidgetSalesPulse />;
-      case 'active_groups': return <WidgetActiveGroups />;
-      case 'tasks_focus': return <WidgetTasksFocus />;
-      // ✅ Utilisation des variables initialisées par défaut
-      case 'housekeeping_status': return <HousekeepingWidget rooms={rooms} onClick={() => onNavigate('/housekeeping')} darkMode={userSettings.darkMode} />;
-      case 'maintenance_alerts': return <MaintenanceWidget tickets={tickets} onClick={() => onNavigate('/maintenance')} darkMode={userSettings.darkMode} />;
-      case 'inventory_alerts': return <InventoryWidget inventory={inventory} onClick={() => onNavigate('/fnb/inventory')} darkMode={userSettings.darkMode} />;
-      default: return null;
+      case 'quick_actions':
+        return <WidgetQuickActions />;
+      case 'agenda_today':
+        return <WidgetAgendaToday />;
+      case 'sales_pulse':
+        return <WidgetSalesPulse />;
+      case 'active_groups':
+        return <WidgetActiveGroups />;
+      case 'tasks_focus':
+        return <WidgetTasksFocus />;
+      default:
+        return null;
     }
   };
 
+  // --- UI: edit panel items list ---
   const PanelItem: React.FC<{ w: DashboardWidgetConfig }> = ({ w }) => {
     const wid = w.id as WidgetId;
     const label = titleByWidget[wid] || w.id;
