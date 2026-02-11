@@ -17,7 +17,7 @@ import {
   X,
   ArrowUp,
   ArrowDown,
-  // ✅ NOUVEAUX IMPORTS POUR LES WIDGETS
+  // ✅ Icônes ajoutées
   BedDouble,
   Wrench,
   Package,
@@ -35,7 +35,6 @@ import type {
   Lead,
   InboxItem,
   DashboardWidgetConfig,
-  // ✅ NOUVEAUX TYPES IMPORTÉS
   Room,
   MaintenanceTicket,
   InventoryItem
@@ -43,13 +42,13 @@ import type {
 
 interface MainDashboardProps {
   userSettings: UserSettings;
-  events: CalendarEvent[];
-  todos: Task[];
-  contacts: Contact[];
-  groups: Group[];
+  // On met les types en optionnel (?) pour éviter les erreurs de typage strict
+  events?: CalendarEvent[];
+  todos?: Task[];
+  contacts?: Contact[];
+  groups?: Group[];
   leads?: Lead[];
   inbox?: InboxItem[];
-  // ✅ NOUVELLES DONNÉES (Optionnelles pour éviter crash si non passées)
   rooms?: Room[];
   tickets?: MaintenanceTicket[];
   inventory?: InventoryItem[];
@@ -72,7 +71,6 @@ type WidgetId =
   | 'sales_pulse'
   | 'active_groups'
   | 'tasks_focus'
-  // ✅ NOUVEAUX IDs
   | 'housekeeping_status'
   | 'maintenance_alerts'
   | 'inventory_alerts';
@@ -83,7 +81,6 @@ const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
   { id: 'sales_pulse', enabled: true, order: 30, size: 'md' },
   { id: 'active_groups', enabled: true, order: 40, size: 'md' },
   { id: 'tasks_focus', enabled: true, order: 50, size: 'md' },
-  // ✅ NOUVEAUX VALEURS PAR DÉFAUT
   { id: 'housekeeping_status', enabled: true, order: 60, size: 'sm' },
   { id: 'maintenance_alerts', enabled: true, order: 70, size: 'sm' },
   { id: 'inventory_alerts', enabled: true, order: 80, size: 'sm' },
@@ -105,7 +102,6 @@ const normalizeWidgets = (widgets?: DashboardWidgetConfig[]) => {
     });
   }
 
-  // add missing defaults (new widgets in future)
   for (const d of DEFAULT_WIDGETS) {
     if (!map.has(d.id)) map.set(d.id, d);
   }
@@ -136,7 +132,6 @@ const titleByWidget: Record<WidgetId, string> = {
   sales_pulse: 'Performance commerciale',
   active_groups: 'Groupes en maison',
   tasks_focus: 'Priorités',
-  // ✅ NOUVEAUX TITRES
   housekeeping_status: 'Hébergement',
   maintenance_alerts: 'Maintenance',
   inventory_alerts: 'Stocks F&B',
@@ -148,7 +143,6 @@ const descByWidget: Record<WidgetId, string> = {
   sales_pulse: 'KPI & relances rapides',
   active_groups: 'Groupes actuellement sur place',
   tasks_focus: 'Vos tâches à traiter',
-  // ✅ NOUVELLES DESCRIPTIONS
   housekeeping_status: 'État des chambres (Propre/Sale)',
   maintenance_alerts: 'Tickets ouverts et urgences',
   inventory_alerts: 'Alertes de rupture de stock',
@@ -160,14 +154,15 @@ const sizeLabel: Record<NonNullable<DashboardWidgetConfig['size']>, string> = {
   lg: 'Large',
 };
 
-// --- NOUVEAUX SOUS-COMPOSANTS (AJOUTÉS) ---
+// --- SOUS-COMPOSANTS ---
 
 const HousekeepingWidget = ({ rooms, onClick, darkMode }: { rooms: Room[], onClick: () => void, darkMode: boolean }) => {
   const stats = useMemo(() => {
-    const total = rooms.length || 1;
-    const clean = rooms.filter(r => r.statusHK === 'ready').length;
-    const dirty = rooms.filter(r => r.statusHK === 'not_started').length;
-    const progress = rooms.filter(r => r.statusHK === 'in_progress').length;
+    const safeRooms = Array.isArray(rooms) ? rooms : [];
+    const total = safeRooms.length || 1;
+    const clean = safeRooms.filter(r => r.statusHK === 'ready').length;
+    const dirty = safeRooms.filter(r => r.statusHK === 'not_started').length;
+    const progress = safeRooms.filter(r => r.statusHK === 'in_progress').length;
     return { clean, dirty, progress, percent: Math.round((clean / total) * 100) };
   }, [rooms]);
 
@@ -195,7 +190,7 @@ const HousekeepingWidget = ({ rooms, onClick, darkMode }: { rooms: Room[], onCli
 };
 
 const MaintenanceWidget = ({ tickets, onClick, darkMode }: { tickets: MaintenanceTicket[], onClick: () => void, darkMode: boolean }) => {
-  const urgent = tickets.filter(t => t.status === 'open').length;
+  const urgent = (tickets || []).filter(t => t.status === 'open').length;
   
   return (
     <div onClick={onClick} className={`p-5 rounded-3xl shadow-sm border cursor-pointer hover:shadow-md transition-all group h-full flex flex-col justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
@@ -220,7 +215,7 @@ const MaintenanceWidget = ({ tickets, onClick, darkMode }: { tickets: Maintenanc
 };
 
 const InventoryWidget = ({ inventory, onClick, darkMode }: { inventory: InventoryItem[], onClick: () => void, darkMode: boolean }) => {
-  const lowStock = inventory.filter(i => i.currentQty <= 5).length;
+  const lowStock = (inventory || []).filter(i => i.currentQty <= 5).length;
 
   return (
     <div onClick={onClick} className={`p-5 rounded-3xl shadow-sm border cursor-pointer hover:shadow-md transition-all group h-full flex flex-col justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
@@ -246,16 +241,17 @@ const InventoryWidget = ({ inventory, onClick, darkMode }: { inventory: Inventor
 
 const MainDashboard: React.FC<MainDashboardProps> = ({
   userSettings,
-  events,
-  todos,
-  contacts,
-  groups,
+  // ✅ CORRECTION CRITIQUE : Initialisation par défaut à []
+  events = [],
+  todos = [],
+  contacts = [],
+  groups = [],
   leads = [],
   inbox = [],
-  // ✅ Nouvelles props reçues (valeurs par défaut vides pour sécurité)
   rooms = [],
   tickets = [],
   inventory = [],
+  
   onNavigate,
   onTaskToggle,
   onTaskClick,
@@ -266,6 +262,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   onOpenContactModal,
   onSaveDashboardWidgets,
 }) => {
+  
   const today = useMemo(() => new Date(), []);
   const theme = userSettings.themeColor || 'indigo';
 
@@ -373,15 +370,9 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
     persistWidgets(next);
   };
 
-  /**
-   * ✅ FIX LAYOUT
-   * Le col-span doit être sur le wrapper (celui dans la grid)
-   * => on gère quick_actions ici (plein largeur desktop)
-   */
   const widgetColSpan = (id: string, size?: DashboardWidgetConfig['size']) => {
     if (id === 'quick_actions') return 'lg:col-span-3';
     if (size === 'lg') return 'lg:col-span-2';
-    // ✅ Les nouveaux widgets 'sm' prennent 1 colonne
     return 'lg:col-span-1';
   };
 
@@ -405,9 +396,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
           { icon: CalendarPlus, label: 'RDV', color: themeLight, onClick: onOpenEventModal },
           { icon: CheckSquare, label: 'Tâche', color: 'bg-emerald-50 text-emerald-600', onClick: onOpenTaskModal },
           { icon: UserPlus, label: 'Contact', color: 'bg-amber-50 text-amber-600', onClick: onOpenContactModal },
-           // Ajout du bouton Lead si tu le souhaites (optionnel, j'ai gardé les 3 originaux pour stricte conformité + ajouté le 4eme du Code B si besoin, sinon je l'enlève. Je garde tes 3 boutons originaux pour sécurité)
-           // Si tu veux le 4eme bouton "Lead" du code B, décommente la ligne dessous :
-           // { icon: Plus, label: 'Lead', color: 'bg-blue-50 text-blue-600', onClick: () => onNavigate('/groups') },
+          { icon: Plus, label: 'Lead', color: 'bg-blue-50 text-blue-600', onClick: () => onNavigate('/groups') },
         ].map((btn, i) => (
           <button
             key={i}
@@ -687,29 +676,19 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
 
   const renderWidget = (id: string) => {
     switch (id as WidgetId) {
-      case 'quick_actions':
-        return <WidgetQuickActions />;
-      case 'agenda_today':
-        return <WidgetAgendaToday />;
-      case 'sales_pulse':
-        return <WidgetSalesPulse />;
-      case 'active_groups':
-        return <WidgetActiveGroups />;
-      case 'tasks_focus':
-        return <WidgetTasksFocus />;
-      // ✅ NOUVEAUX CAS
-      case 'housekeeping_status':
-        return <HousekeepingWidget rooms={rooms} onClick={() => onNavigate('/housekeeping')} darkMode={userSettings.darkMode} />;
-      case 'maintenance_alerts':
-        return <MaintenanceWidget tickets={tickets} onClick={() => onNavigate('/maintenance')} darkMode={userSettings.darkMode} />;
-      case 'inventory_alerts':
-        return <InventoryWidget inventory={inventory} onClick={() => onNavigate('/fnb/inventory')} darkMode={userSettings.darkMode} />;
-      default:
-        return null;
+      case 'quick_actions': return <WidgetQuickActions />;
+      case 'agenda_today': return <WidgetAgendaToday />;
+      case 'sales_pulse': return <WidgetSalesPulse />;
+      case 'active_groups': return <WidgetActiveGroups />;
+      case 'tasks_focus': return <WidgetTasksFocus />;
+      // ✅ Utilisation des variables initialisées par défaut
+      case 'housekeeping_status': return <HousekeepingWidget rooms={rooms} onClick={() => onNavigate('/housekeeping')} darkMode={userSettings.darkMode} />;
+      case 'maintenance_alerts': return <MaintenanceWidget tickets={tickets} onClick={() => onNavigate('/maintenance')} darkMode={userSettings.darkMode} />;
+      case 'inventory_alerts': return <InventoryWidget inventory={inventory} onClick={() => onNavigate('/fnb/inventory')} darkMode={userSettings.darkMode} />;
+      default: return null;
     }
   };
 
-  // --- UI: edit panel items list ---
   const PanelItem: React.FC<{ w: DashboardWidgetConfig }> = ({ w }) => {
     const wid = w.id as WidgetId;
     const label = titleByWidget[wid] || w.id;
