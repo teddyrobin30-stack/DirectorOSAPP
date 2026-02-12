@@ -108,6 +108,23 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
       date: new Date().toISOString().split('T')[0], time: '10:00', treatment: '', source: 'Direct'
     });
     setCustomSource('');
+
+    // --- NATIVE NOTIFICATION ---
+    try {
+      const savedSettings = localStorage.getItem('hotelos_notifications');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        if (settings.pushEnabled && settings.newBooking && Notification.permission === 'granted') {
+          new Notification("💆 Nouveau Soin Réservé", {
+            body: `Client : ${newRequest.clientName} - ${newRequest.time}`,
+            icon: "/pwa-192x192.png",
+            silent: false
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Erreur Notification:", e);
+    }
   };
 
   // --- FILTERING LOGIC ---

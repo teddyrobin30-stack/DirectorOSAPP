@@ -7,6 +7,8 @@ import {
   onSnapshot,
   query,
   where,
+  limit,
+  getDocs,
   Unsubscribe
 } from "firebase/firestore";
 
@@ -72,13 +74,19 @@ export const deleteDocument = async (collectionName: string, id: string | number
 // --- LISTENERS (SYNCHRONISATION TEMPS RÉEL) ---
 
 /**
- * Écoute une collection PARTAGÉE (Tout le staff voit tout)
+ * Écoute une collection PARTAGÉE avec Limite optionnelle
  */
 export const subscribeToSharedCollection = (
   collectionName: string,
-  callback: (data: any[]) => void
+  callback: (data: any[]) => void,
+  limitCount?: number
 ): Unsubscribe => {
-  const q = query(collection(db, collectionName));
+  let q;
+  if (limitCount) {
+    q = query(collection(db, collectionName), limit(limitCount));
+  } else {
+    q = query(collection(db, collectionName));
+  }
 
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -89,16 +97,51 @@ export const subscribeToSharedCollection = (
 };
 
 /**
+ * Récupère une collection en UNE SEULE FOIS (Pas de temps réel)
+ * Optimisé pour les données statiques (Inventaire, Recettes, etc.)
+ */
+export const fetchSharedCollection = async (collectionName: string): Promise<any[]> => {
+  try {
+    const snapshot = await getDocs(collection(db, collectionName));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error(`Error fetching ${collectionName}:`, error);
+    return [];
+  }
+};
+
+/**
+ * Écoute une collection avec requête complexe (Where + Limit)
+ */
+export const subscribeToCollectionWithQuery = (
+  collectionName: string,
+  constraints: any[],
+  callback: (data: any[]) => void
+): Unsubscribe => {
+  const q = query(collection(db, collectionName), ...constraints);
+  return onSnapshot(q, (snapshot) => {
+    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    callback(items);
+  }, (error) => console.warn(`Query listener error on ${collectionName}:`, error));
+};
+
+/**
  * Écoute une collection PRIVÉE (Filtrée par ownerId)
  */
 export const subscribeToUserCollection = (
   collectionName: string,
   userId: string,
-  callback: (data: any[]) => void
+  callback: (data: any[]) => void,
+  limitCount?: number
 ): Unsubscribe => {
   if (!userId) return () => { };
 
-  const q = query(collection(db, collectionName), where("ownerId", "==", userId));
+  let q;
+  if (limitCount) {
+    q = query(collection(db, collectionName), where("ownerId", "==", userId), limit(limitCount));
+  } else {
+    q = query(collection(db, collectionName), where("ownerId", "==", userId));
+  }
 
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));

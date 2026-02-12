@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { UserSettings } from '../types';
 import { useAuth } from '../services/authContext';
+import BrandLogo from './BrandLogo';
 
 interface MobileNavBarProps {
     userSettings: UserSettings;
@@ -100,7 +101,7 @@ const MobileNavBar: React.FC<MobileNavBarProps> = ({ userSettings, totalUnread =
                     >
                         {/* Drawer Header */}
                         <div className="p-6 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
-                            <h3 className="text-xl font-black">Menu Principal</h3>
+                            <BrandLogo theme={userSettings.darkMode ? 'dark' : 'light'} size="md" />
                             <button onClick={() => setIsDrawerOpen(false)} className="p-2 bg-slate-200 dark:bg-slate-700 rounded-full">
                                 <X size={20} />
                             </button>

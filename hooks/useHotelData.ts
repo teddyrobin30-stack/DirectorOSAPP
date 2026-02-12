@@ -3,8 +3,11 @@ import { useState, useEffect } from "react";
 import {
   subscribeToSharedCollection,
   subscribeToUserCollection,
+  fetchSharedCollection,
+  subscribeToCollectionWithQuery,
   DB_COLLECTIONS,
 } from "../services/db";
+import { where } from "firebase/firestore";
 import {
   INITIAL_CONTACTS,
   INITIAL_TODOS,
@@ -128,30 +131,31 @@ export const useHotelData = (user: any) => {
       )
     );
 
+    // LIMITATION: 50 derniers tickets seulement
     unsubs.push(
       subscribeToSharedCollection(DB_COLLECTIONS.MAINTENANCE, (data) => {
         const t = data.filter((d: any) => !d.providerName) as MaintenanceTicket[];
         const c = data.filter((d: any) => d.providerName) as MaintenanceContract[];
         setTickets(t);
         setContracts(c);
-      })
+      }, 50)
     );
 
-    unsubs.push(
-      subscribeToSharedCollection(DB_COLLECTIONS.INVENTORY, (data) => {
-        const invMap: Record<string, MonthlyInventory> = {};
-        data.forEach((d: any) => (invMap[d.monthId] = d));
-        setInventory(invMap);
-      })
-    );
+    // OPTIMISATION: Chargement UNIQUE pour l'inventaire (pas de temps réel)
+    fetchSharedCollection(DB_COLLECTIONS.INVENTORY).then(data => {
+      const invMap: Record<string, MonthlyInventory> = {};
+      data.forEach((d: any) => (invMap[d.monthId] = d));
+      setInventory(invMap);
+    });
 
+    // LIMITATION: 50 derniers logs
     unsubs.push(
       subscribeToSharedCollection(DB_COLLECTIONS.RECEPTION, (data) => {
         setLogs(data.filter((d: any) => toIdString(d).startsWith("log-")) as LogEntry[]);
         setWakeups(data.filter((d: any) => toIdString(d).startsWith("wk-")) as WakeUpCall[]);
         setTaxis(data.filter((d: any) => toIdString(d).startsWith("tx-")) as TaxiBooking[]);
         setLostItems(data.filter((d: any) => toIdString(d).startsWith("li-")) as LostItem[]);
-      })
+      }, 50)
     );
 
     /**
@@ -189,58 +193,58 @@ export const useHotelData = (user: any) => {
       })
     );
 
+    // OPTIMISATION: Spa Requests Futures uniquement (ou aujourd'hui)
+    // On suppose que 'date' est stocké en string YYYY-MM-DD
+    const todayStr = new Date().toISOString().split('T')[0];
     unsubs.push(
-      subscribeToSharedCollection(DB_COLLECTIONS.SPA, (data) =>
+      subscribeToCollectionWithQuery(DB_COLLECTIONS.SPA, [where('date', '>=', todayStr)], (data) =>
         setSpaRequests(data as SpaRequest[])
       )
     );
 
-    unsubs.push(
-      subscribeToSharedCollection(DB_COLLECTIONS.SPA_INVENTORY, (data) =>
-        setSpaInventory(data as SpaInventoryItem[])
-      )
+    // OPTIMISATION: Chargement UNIQUE pour Spa Inventory
+    fetchSharedCollection(DB_COLLECTIONS.SPA_INVENTORY).then(data =>
+      setSpaInventory(data as SpaInventoryItem[])
     );
 
-    // 2. MESSAGERIE
+    // 2. MESSAGERIE (Toujours temps réel, mais on pourrait limiter)
     unsubs.push(
       subscribeToSharedCollection("conversations", (data) =>
         setChannels(data as ChatChannel[])
-      )
+        , 20) // Limit to last 20 active channels
     );
 
-    // 3. ESPACES PRIVÉS
-    unsubs.push(
-      subscribeToUserCollection(DB_COLLECTIONS.TASKS, user.uid, (data) =>
-        setTodos(data as Task[])
-      )
-    );
+    // 3. ESPACES PRIVÉS (Filtrés par userId)
+    if (user.uid) {
+      // Limit to 50 active tasks
+      unsubs.push(
+        subscribeToUserCollection(DB_COLLECTIONS.TASKS, user.uid, (data) =>
+          setTodos(data as Task[])
+          , 50)
+      );
 
-    unsubs.push(
-      subscribeToUserCollection(DB_COLLECTIONS.CONTACTS, user.uid, (data) =>
-        setContacts(data as Contact[])
-      )
-    );
+      unsubs.push(
+        subscribeToUserCollection(DB_COLLECTIONS.CONTACTS, user.uid, (data) =>
+          setContacts(data as Contact[])
+        )
+      );
 
-    // ✅ CORRECTION AGENDA ROBUSTE : Dates Start ET End
-    unsubs.push(
-      subscribeToUserCollection(DB_COLLECTIONS.AGENDA, user.uid, (data) => {
-        const evts = (data ?? []).map((e: any) => {
-          const rawStart = e.start?.seconds ? e.start.seconds * 1000 : e.start;
-          const rawEnd = e.end?.seconds ? e.end.seconds * 1000 : e.end || rawStart;
+      unsubs.push(
+        subscribeToUserCollection(DB_COLLECTIONS.AGENDA, user.uid, (data) => {
+          const evts = (data ?? []).map((e: any) => {
+            const rawStart = e.start?.seconds ? e.start.seconds * 1000 : e.start;
+            const rawEnd = e.end?.seconds ? e.end.seconds * 1000 : e.end || rawStart;
 
-          return {
-            ...e,
-            start: new Date(rawStart),
-            end: new Date(rawEnd),
-          };
-        });
-        setEvents(evts as CalendarEvent[]);
-      })
-    );
-
-    return () => {
-      unsubs.forEach((unsub) => unsub());
-    };
+            return {
+              ...e,
+              start: new Date(rawStart),
+              end: new Date(rawEnd),
+            };
+          });
+          setEvents(evts as CalendarEvent[]);
+        })
+      );
+    }
   }, [user]);
 
   return {

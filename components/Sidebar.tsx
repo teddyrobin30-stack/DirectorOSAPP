@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { UserSettings } from '../types';
 import { useAuth } from '../services/authContext';
+import BrandLogo from './BrandLogo';
 
 interface SidebarProps {
     userSettings: UserSettings;
@@ -42,15 +43,8 @@ const Sidebar: React.FC<SidebarProps> = ({ userSettings, totalUnread = 0 }) => {
         <div className={`hidden md:flex flex-col w-64 h-full border-r transition-colors duration-300 ${userSettings.darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
 
             {/* LOGO AREA */}
-            <div className="p-6 flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700`}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className={`text-${userSettings.themeColor}-600`}>
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
-                        <path d="M8 7v10M16 7v10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.5" />
-                    </svg>
-                </div>
-                <span className="font-bold tracking-[0.2em] text-sm uppercase dark:text-white">HotelOS</span>
+            <div className="p-6">
+                <BrandLogo theme={userSettings.darkMode ? 'dark' : 'light'} size="sm" />
             </div>
 
             {/* NAVIGATION LIST */}

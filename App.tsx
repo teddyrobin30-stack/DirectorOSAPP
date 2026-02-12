@@ -71,6 +71,8 @@ import SettingsView from './components/SettingsView';
 import AdminPanelView from './components/AdminPanelView';
 import Sidebar from './components/Sidebar';
 import MobileNavBar from './components/MobileNavBar';
+import SplashScreen from './components/SplashScreen';
+import CalendarView from './components/CalendarView';
 
 const GOOGLE_CLIENT_ID = "";
 
@@ -78,6 +80,21 @@ const AuthenticatedApp: React.FC = () => {
   const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // --- SPLASH SCREEN STATE ---
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashFade, setSplashFade] = useState(false);
+
+  useEffect(() => {
+    // Start fade out at 2300ms (so it fades for 700ms until 3000ms)
+    const timerFade = setTimeout(() => setSplashFade(true), 2300);
+    // Unmount exactly at 3000ms
+    const timerRemove = setTimeout(() => setShowSplash(false), 3000);
+    return () => {
+      clearTimeout(timerFade);
+      clearTimeout(timerRemove);
+    };
+  }, []);
 
   // UI States
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -302,6 +319,7 @@ const AuthenticatedApp: React.FC = () => {
   return (
     <div className={`min-h-screen w-full flex flex-col md:flex-row font-sans transition-colors duration-300 ${userSettings.darkMode ? 'bg-slate-900 text-slate-100 dark' : 'bg-slate-50 text-slate-900'}`}>
       <InstallPwaPrompt />
+      {showSplash && <SplashScreen opacity={splashFade ? 0 : 1} />}
 
       {/* ✅ SIDEBAR (DESKTOP) */}
       <Sidebar userSettings={userSettings} totalUnread={totalUnread} />
@@ -419,7 +437,7 @@ const AuthenticatedApp: React.FC = () => {
               <Route path="/agenda" element={
                 user.permissions.canViewAgenda ?
                   <PageTransition>
-                    <AgendaView
+                    <CalendarView
                       events={events}
                       todos={todos}
                       userSettings={userSettings}
@@ -427,6 +445,8 @@ const AuthenticatedApp: React.FC = () => {
                       onEventClick={(e) => { setEditEvent(e); setShowEventModal(true); }}
                       onGroupClick={setSelectedGroupDetail}
                       groups={groups}
+                      spaRequests={spaRequests}
+                      leads={leads}
                     />
                   </PageTransition>
                   : <Navigate to="/" />
@@ -657,7 +677,36 @@ const AuthenticatedApp: React.FC = () => {
       <MobileNavBar userSettings={userSettings} totalUnread={totalUnread} />
 
       {/* GLOBAL MODALS */}
-      <AiAssistant isOpen={showAiAssistant} onClose={() => setShowAiAssistant(false)} userSettings={userSettings} tasks={todos} contacts={contacts} rooms={rooms} inventory={inventory} maintenance={tickets} />
+      <AiAssistant
+        isOpen={showAiAssistant}
+        onClose={() => setShowAiAssistant(false)}
+        userSettings={userSettings}
+        tasks={todos}
+        contacts={contacts}
+        rooms={rooms}
+        inventory={inventory}
+        maintenance={tickets}
+        onAddTask={(text) => handleSaveTask({
+          id: Date.now(),
+          text,
+          done: false,
+          tag: 'Général',
+          priority: 'Medium',
+          status: 'Pas commencé'
+        })}
+        onAddEvent={(details) => {
+          setEditEvent({
+            id: Date.now(),
+            title: details.title,
+            start: details.date ? new Date(details.date) : new Date(),
+            end: details.date ? new Date(new Date(details.date).getTime() + 3600000) : new Date(Date.now() + 3600000),
+            allDay: false,
+            type: 'meeting',
+            attendees: []
+          });
+          setShowEventModal(true);
+        }}
+      />
 
       {/* ✅ IMPORTANT: SettingsModal -> save Firestore */}
       <SettingsModal

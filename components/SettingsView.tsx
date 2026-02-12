@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { User, Moon, Sun, Save, Loader2, LogOut, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Moon, Sun, Save, Loader2, LogOut, ArrowLeft, Bell, Mail, MessageSquare, AlertTriangle, Smartphone, CheckCircle2 } from 'lucide-react';
 import { UserSettings } from '../types';
 import { THEME_COLORS } from '../constants';
 import { useAuth } from '../services/authContext';
@@ -10,10 +10,71 @@ interface SettingsViewProps {
     onNavigate: (path: string) => void;
 }
 
+interface NotificationSettings {
+    pushEnabled: boolean;
+    emailEnabled: boolean;
+    newTasks: boolean;
+    reminders: boolean;
+    messages: boolean;
+    mentions: boolean;
+    lowStock: boolean;
+    newBooking: boolean;
+    maintenanceIssues: boolean;
+}
+
+const DEFAULT_NOTIFS: NotificationSettings = {
+    pushEnabled: false,
+    emailEnabled: true,
+    newTasks: true,
+    reminders: true,
+    messages: true,
+    mentions: true,
+    lowStock: true,
+    newBooking: true,
+    maintenanceIssues: true
+};
+
 const SettingsView: React.FC<SettingsViewProps> = ({ userSettings, onSave, onNavigate }) => {
     const { user, logout, updateProfile } = useAuth();
     const [localSettings, setLocalSettings] = useState<UserSettings>(userSettings);
     const [isSaving, setIsSaving] = useState(false);
+
+    // --- NOTIFICATION STATE ---
+    const [notifSettings, setNotifSettings] = useState<NotificationSettings>(() => {
+        const saved = localStorage.getItem('hotelos_notifications');
+        return saved ? JSON.parse(saved) : DEFAULT_NOTIFS;
+    });
+
+    // --- PERSISTENCE ---
+    useEffect(() => {
+        localStorage.setItem('hotelos_notifications', JSON.stringify(notifSettings));
+    }, [notifSettings]);
+
+    // --- NATIVE PUSH LOGIC ---
+    const handlePushToggle = async () => {
+        if (!notifSettings.pushEnabled) {
+            // Turning ON
+            if (!('Notification' in window)) {
+                alert("Votre navigateur ne supporte pas les notifications.");
+                return;
+            }
+
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+                setNotifSettings(prev => ({ ...prev, pushEnabled: true }));
+                new Notification("🔔 DirectorOS", {
+                    body: "Notifications activées avec succès !",
+                    icon: "/pwa-192x192.png" // Assumes generic icon exists or browser default
+                });
+            } else {
+                setNotifSettings(prev => ({ ...prev, pushEnabled: false }));
+                alert("Permission refusée. Vérifiez les paramètres de votre navigateur.");
+            }
+        } else {
+            // Turning OFF
+            setNotifSettings(prev => ({ ...prev, pushEnabled: false }));
+        }
+    };
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -22,6 +83,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userSettings, onSave, onNav
                 await updateProfile(localSettings.userName);
             }
             onSave(localSettings);
+            // Notifications are auto-saved to localStorage, but we could sync to Firestore here too if needed.
         } catch (e) {
             console.error("Erreur sauvegarde profil:", e);
             alert("Erreur lors de la sauvegarde.");
@@ -122,6 +184,145 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userSettings, onSave, onNav
                                 </div>
                                 <div className={`w-12 h-7 rounded-full transition-colors relative ${localSettings.darkMode ? 'bg-indigo-500' : 'bg-slate-300'}`}>
                                     <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${localSettings.darkMode ? 'left-6' : 'left-1'}`} />
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                {/* CENTRE DE NOTIFICATIONS */}
+                <div className={`col-span-1 md:col-span-2 p-6 rounded-[32px] border-2 border-slate-100 dark:border-slate-800 ${userSettings.darkMode ? 'bg-slate-900' : 'bg-white'} shadow-xl`}>
+                    <h3 className="text-lg font-black mb-6 flex items-center gap-2">
+                        <Bell size={20} className="text-violet-500" /> Centre de Notifications
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+
+                        {/* CANAUX */}
+                        <div className="space-y-4">
+                            <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-2">Canaux</h4>
+
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-xl ${notifSettings.pushEnabled ? 'bg-violet-100 text-violet-600' : 'bg-slate-100 text-slate-400'}`}>
+                                        <Smartphone size={18} />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-sm">Push Mobile</p>
+                                        <p className="text-[10px] text-slate-400">Sur cet appareil</p>
+                                    </div>
+                                </div>
+                                <div
+                                    onClick={handlePushToggle}
+                                    className={`w-12 h-7 rounded-full transition-colors relative cursor-pointer ${notifSettings.pushEnabled ? 'bg-violet-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${notifSettings.pushEnabled ? 'left-6' : 'left-1'}`} />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-xl ${notifSettings.emailEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                                        <Mail size={18} />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-sm">Emails</p>
+                                        <p className="text-[10px] text-slate-400">Récapitulatifs</p>
+                                    </div>
+                                </div>
+                                <div
+                                    onClick={() => setNotifSettings({ ...notifSettings, emailEnabled: !notifSettings.emailEnabled })}
+                                    className={`w-12 h-7 rounded-full transition-colors relative cursor-pointer ${notifSettings.emailEnabled ? 'bg-blue-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${notifSettings.emailEnabled ? 'left-6' : 'left-1'}`} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* OPERATIONS */}
+                        <div className="space-y-4">
+                            <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-2">Opérations</h4>
+                            {/* New Task */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Nouvelle tâche assignée</span>
+                                <div
+                                    onClick={() => setNotifSettings({ ...notifSettings, newTasks: !notifSettings.newTasks })}
+                                    className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${notifSettings.newTasks ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${notifSettings.newTasks ? 'left-5' : 'left-1'}`} />
+                                </div>
+                            </div>
+                            {/* Reminders */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Rappels d'échéance</span>
+                                <div
+                                    onClick={() => setNotifSettings({ ...notifSettings, reminders: !notifSettings.reminders })}
+                                    className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${notifSettings.reminders ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${notifSettings.reminders ? 'left-5' : 'left-1'}`} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* MESSAGERIE */}
+                        <div className="space-y-4">
+                            <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-2">Messagerie</h4>
+                            {/* Messages */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Messages privés</span>
+                                <div
+                                    onClick={() => setNotifSettings({ ...notifSettings, messages: !notifSettings.messages })}
+                                    className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${notifSettings.messages ? 'bg-indigo-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${notifSettings.messages ? 'left-5' : 'left-1'}`} />
+                                </div>
+                            </div>
+                            {/* Mentions */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Mentions (@)</span>
+                                <div
+                                    onClick={() => setNotifSettings({ ...notifSettings, mentions: !notifSettings.mentions })}
+                                    className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${notifSettings.mentions ? 'bg-indigo-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${notifSettings.mentions ? 'left-5' : 'left-1'}`} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ALERTES METIER */}
+                        <div className="space-y-4">
+                            <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-2">Alertes Métier</h4>
+                            {/* Low Stock */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                                    Stock Faible <AlertTriangle size={12} className="text-amber-500" />
+                                </span>
+                                <div
+                                    onClick={() => setNotifSettings({ ...notifSettings, lowStock: !notifSettings.lowStock })}
+                                    className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${notifSettings.lowStock ? 'bg-amber-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${notifSettings.lowStock ? 'left-5' : 'left-1'}`} />
+                                </div>
+                            </div>
+                            {/* New Booking */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Nouvelle Résa.</span>
+                                <div
+                                    onClick={() => setNotifSettings({ ...notifSettings, newBooking: !notifSettings.newBooking })}
+                                    className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${notifSettings.newBooking ? 'bg-amber-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${notifSettings.newBooking ? 'left-5' : 'left-1'}`} />
+                                </div>
+                            </div>
+                            {/* Maintenance */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Problème Maintenance</span>
+                                <div
+                                    onClick={() => setNotifSettings({ ...notifSettings, maintenanceIssues: !notifSettings.maintenanceIssues })}
+                                    className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${notifSettings.maintenanceIssues ? 'bg-amber-500' : 'bg-slate-300'}`}
+                                >
+                                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${notifSettings.maintenanceIssues ? 'left-5' : 'left-1'}`} />
                                 </div>
                             </div>
                         </div>
