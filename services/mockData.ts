@@ -1,9 +1,9 @@
 
-import { 
-  Contact, Task, Group, CalendarEvent, BusinessConfig, CatalogItem, 
-  Venue, Client, MonthlyInventory, Recipe, RatioItem, ChatChannel, 
-  Room, MaintenanceTicket, MaintenanceContract, Lead, InboxItem, 
-  LogEntry, WakeUpCall, TaxiBooking, LostItem, SpaRequest 
+import {
+  Contact, Task, Group, CalendarEvent, BusinessConfig, CatalogItem,
+  Venue, Client, MonthlyInventory, Recipe, RatioItem, ChatChannel,
+  Room, MaintenanceTicket, MaintenanceContract, Lead, InboxItem,
+  LogEntry, WakeUpCall, TaxiBooking, LostItem, SpaRequest
 } from '../types';
 
 export const INITIAL_CONTACTS: Contact[] = [
@@ -79,6 +79,7 @@ export const INITIAL_CHANNELS: ChatChannel[] = [
     type: 'group',
     name: 'Général',
     participants: [],
+    allowedUserIds: ['all'], // ✅ Visible par tous
     messages: [
       { id: 'msg-1', senderId: 'system', senderName: 'System', text: 'Bienvenue sur HotelOS Messaging.', timestamp: new Date().toISOString() }
     ],

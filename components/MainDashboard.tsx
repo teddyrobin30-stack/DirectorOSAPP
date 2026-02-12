@@ -16,8 +16,7 @@ import {
   Video,
   X,
   ArrowUp,
-  ArrowDown,
-  Calendar
+  ArrowDown
 } from 'lucide-react';
 import type {
   UserSettings,
@@ -28,16 +27,27 @@ import type {
   Lead,
   InboxItem,
   DashboardWidgetConfig,
+  SpaRequest,
+  DashboardWidgetId
 } from '../types';
+
+// Widgets
+import WidgetSpaRequests from './widgets/WidgetSpaRequests';
+import WidgetFnbCalculator from './widgets/WidgetFnbCalculator';
+import WidgetShiftLog from './widgets/WidgetShiftLog';
+import WidgetRoomStatus from './widgets/WidgetRoomStatus';
+import WidgetTeamChat from './widgets/WidgetTeamChat';
 
 interface MainDashboardProps {
   userSettings: UserSettings;
+  userRole?: string;
   events?: CalendarEvent[];
   todos?: Task[];
   contacts?: Contact[];
   groups?: Group[];
   leads?: Lead[];
   inbox?: InboxItem[];
+  spaRequests?: SpaRequest[];
 
   onNavigate: (tab: string) => void;
   onTaskToggle: (id: string | number) => void;
@@ -51,39 +61,64 @@ interface MainDashboardProps {
   onSaveDashboardWidgets?: (widgets: DashboardWidgetConfig[]) => void;
 }
 
-type WidgetId =
-  | 'quick_actions'
-  | 'agenda_today'
-  | 'sales_pulse'
-  | 'active_groups'
-  | 'tasks_focus';
-
-const DEFAULT_WIDGETS: DashboardWidgetConfig[] = [
+// Configuration par défaut (base)
+const BASE_WIDGETS: DashboardWidgetConfig[] = [
   { id: 'quick_actions', enabled: true, order: 10, size: 'md' },
   { id: 'agenda_today', enabled: true, order: 20, size: 'lg' },
   { id: 'sales_pulse', enabled: true, order: 30, size: 'md' },
   { id: 'active_groups', enabled: true, order: 40, size: 'md' },
   { id: 'tasks_focus', enabled: true, order: 50, size: 'md' },
+  { id: 'spa_requests', enabled: false, order: 60, size: 'md' },
+  { id: 'fnb_calculator', enabled: false, order: 70, size: 'sm' },
+  { id: 'shift_log', enabled: true, order: 60, size: 'md' },
+  { id: 'room_status', enabled: true, order: 80, size: 'md' },
+  { id: 'team_chat', enabled: true, order: 90, size: 'lg' },
 ];
+
+const getRoleBasedDefaults = (base: DashboardWidgetConfig[], role?: string): DashboardWidgetConfig[] => {
+  // Clone pour éviter les mutations
+  let defaults = base.map(w => ({ ...w }));
+
+  if (role === 'spa') {
+    // SPA : On active le widget SPA et on le remonte
+    defaults = defaults.map(w => {
+      if (w.id === 'spa_requests') return { ...w, enabled: true, order: 15 };
+      return w;
+    });
+  } else if (role === 'fnb') {
+    // F&B : On active la calculette et on la remonte
+    defaults = defaults.map(w => {
+      if (w.id === 'fnb_calculator') return { ...w, enabled: true, order: 15 };
+      return w;
+    });
+  } else if (role === 'admin' || role === 'manager') {
+    // ADMIN : Tout visible pour la découverte
+    defaults = defaults.map(w => ({ ...w, enabled: true }));
+  }
+
+  return defaults.sort((a, b) => a.order - b.order);
+};
 
 const clampOrder = (n: number) => (Number.isFinite(n) ? n : 999);
 
-const normalizeWidgets = (widgets?: DashboardWidgetConfig[]) => {
-  const fromSettings = Array.isArray(widgets) && widgets.length ? widgets : DEFAULT_WIDGETS;
+const normalizeWidgets = (widgets: DashboardWidgetConfig[] | undefined, defaults: DashboardWidgetConfig[]) => {
+  const fromSettings = Array.isArray(widgets) && widgets.length ? widgets : defaults;
 
   const map = new Map<string, DashboardWidgetConfig>();
+
+  // 1. Add saved/current widgets
   for (const w of fromSettings) {
     if (!w?.id) continue;
     map.set(String(w.id), {
-      id: String(w.id),
+      id: String(w.id) as DashboardWidgetId,
       enabled: Boolean(w.enabled),
       order: clampOrder(Number(w.order)),
       size: w.size === 'sm' || w.size === 'md' || w.size === 'lg' ? w.size : 'md',
     });
   }
 
-  // add missing defaults
-  for (const d of DEFAULT_WIDGETS) {
+  // 2. Add missing defaults (nouveaux widgets pas encore sauvés dans settings)
+  for (const d of defaults) {
     if (!map.has(d.id)) map.set(d.id, d);
   }
 
@@ -107,20 +142,30 @@ const isDateInRange = (d: Date, startStr: string, endStr: string) => {
 const prettyDateFR = (date: Date) =>
   date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 
-const titleByWidget: Record<WidgetId, string> = {
+const titleByWidget: Record<string, string> = {
   quick_actions: 'Raccourcis',
   agenda_today: 'Agenda du jour',
   sales_pulse: 'Performance commerciale',
   active_groups: 'Groupes en maison',
   tasks_focus: 'Priorités',
+  spa_requests: 'SPA & Bien-être',
+  fnb_calculator: 'Calculateur F&B',
+  shift_log: 'Main Courante',
+  room_status: 'État Chambres',
+  team_chat: 'Messagerie Équipe',
 };
 
-const descByWidget: Record<WidgetId, string> = {
+const descByWidget: Record<string, string> = {
   quick_actions: 'Créer un RDV, une tâche ou un contact',
   agenda_today: 'Vos rendez-vous du jour',
   sales_pulse: 'KPI & relances rapides',
   active_groups: 'Groupes actuellement sur place',
   tasks_focus: 'Vos tâches à traiter',
+  spa_requests: 'Dernières demandes de soins',
+  fnb_calculator: 'Calcul rapide de marge',
+  shift_log: 'Flux des événements récents',
+  room_status: 'Synthèse ménage et technique',
+  team_chat: 'Communication instantanée',
 };
 
 const sizeLabel: Record<NonNullable<DashboardWidgetConfig['size']>, string> = {
@@ -131,13 +176,14 @@ const sizeLabel: Record<NonNullable<DashboardWidgetConfig['size']>, string> = {
 
 const MainDashboard: React.FC<MainDashboardProps> = ({
   userSettings,
-  // ✅ SÉCURITÉ : Initialisation à [] pour éviter l'écran blanc
+  userRole,
   events = [],
   todos = [],
   contacts = [],
   groups = [],
   leads = [],
   inbox = [],
+  spaRequests = [],
   onNavigate,
   onTaskToggle,
   onTaskClick,
@@ -151,7 +197,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   const today = useMemo(() => new Date(), []);
   const theme = userSettings.themeColor || 'indigo';
 
-  // Data computed
+  // --- Data Computed ---
   const todaysEvents = useMemo(() => {
     return events
       .filter((e) => isSameDay(new Date(e.start), today))
@@ -169,20 +215,21 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   const salesKPIs = useMemo(() => {
     const pipeline = leads.filter((l) => l.status === 'nouveau' || l.status === 'en_cours').length;
     const newRequests = inbox.filter((i) => i.status === 'to_process').length;
-
     const urgentAction = leads.find((l) => {
       const d = new Date(l.requestDate);
       const diff = (today.getTime() - d.getTime()) / (1000 * 3600 * 24);
       return diff > 7 && l.status === 'nouveau';
     })?.contactName;
-
     return { pipeline, newRequests, urgentAction };
   }, [leads, inbox, today]);
 
-  // Widgets config
+  // --- Widgets Configuration ---
+  const defaults = useMemo(() => getRoleBasedDefaults(BASE_WIDGETS, userRole), [userRole]);
+
+  // Initial widgets calculation
   const initialWidgets = useMemo(
-    () => normalizeWidgets(userSettings.dashboardWidgets),
-    [userSettings.dashboardWidgets]
+    () => normalizeWidgets(userSettings.dashboardWidgets, defaults),
+    [userSettings.dashboardWidgets, defaults]
   );
 
   const [editMode, setEditMode] = useState(false);
@@ -195,8 +242,8 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   const dragIdRef = useRef<string | null>(null);
 
   const sortedEnabledWidgets = useMemo(() => {
-    return normalizeWidgets(widgetsDraft).filter((w) => w.enabled);
-  }, [widgetsDraft]);
+    return normalizeWidgets(widgetsDraft, defaults).filter((w) => w.enabled);
+  }, [widgetsDraft, defaults]);
 
   const persistWidgets = (next: DashboardWidgetConfig[]) => {
     setWidgetsDraft(next);
@@ -214,7 +261,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   };
 
   const swapOrder = (id: string, dir: -1 | 1) => {
-    const sorted = normalizeWidgets(widgetsDraft);
+    const sorted = normalizeWidgets(widgetsDraft, defaults);
     const idx = sorted.findIndex((w) => w.id === id);
     if (idx < 0) return;
 
@@ -238,7 +285,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
     dragIdRef.current = null;
     if (!sourceId || sourceId === targetId) return;
 
-    const sorted = normalizeWidgets(widgetsDraft);
+    const sorted = normalizeWidgets(widgetsDraft, defaults);
     const from = sorted.findIndex((w) => w.id === sourceId);
     const to = sorted.findIndex((w) => w.id === targetId);
     if (from < 0 || to < 0) return;
@@ -262,7 +309,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   const themeText = `text-${theme}-600`;
   const themeBadge = `bg-${theme}-50 text-${theme}-700`;
 
-  // ------- Widgets renderers -------
+  // --- Inner Widgets Renderers (Existing) ---
   const WidgetQuickActions = () => (
     <section className="w-full">
       <div className="flex justify-between items-center mb-4 px-1">
@@ -271,7 +318,6 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
           <p className="text-[11px] text-slate-400 mt-1">{descByWidget.quick_actions}</p>
         </div>
       </div>
-
       <div className="grid grid-cols-3 gap-3 md:gap-4">
         {[
           { icon: CalendarPlus, label: 'RDV', color: themeLight, onClick: onOpenEventModal },
@@ -281,11 +327,10 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
           <button
             key={i}
             onClick={btn.onClick}
-            className={`p-4 md:p-5 rounded-3xl flex flex-col items-center justify-center gap-2 md:gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm border ${
-              userSettings.darkMode
-                ? 'bg-slate-800 border-slate-700 text-white'
-                : 'bg-white border-slate-100 text-slate-700'
-            }`}
+            className={`p-4 md:p-5 rounded-3xl flex flex-col items-center justify-center gap-2 md:gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm border ${userSettings.darkMode
+              ? 'bg-slate-800 border-slate-700 text-white'
+              : 'bg-white border-slate-100 text-slate-700'
+              }`}
           >
             <div className={`p-3 rounded-full ${btn.color}`}>
               <btn.icon size={22} className="md:w-6 md:h-6" />
@@ -317,29 +362,24 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
             <div
               key={evt.id}
               onClick={() => onEventClick(evt)}
-              className={`p-4 rounded-2xl shadow-sm border flex items-center gap-4 cursor-pointer transition-transform hover:translate-x-1 ${
-                userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'
-              }`}
+              className={`p-4 rounded-2xl shadow-sm border flex items-center gap-4 cursor-pointer transition-transform hover:translate-x-1 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'
+                }`}
             >
               <div
-                className={`flex flex-col items-center justify-center min-w-[3.6rem] p-2.5 rounded-xl ${
-                  evt.type === 'pro' ? themeLight : 'bg-emerald-50 text-emerald-700'
-                }`}
+                className={`flex flex-col items-center justify-center min-w-[3.6rem] p-2.5 rounded-xl ${evt.type === 'pro' ? themeLight : 'bg-emerald-50 text-emerald-700'
+                  }`}
               >
                 <span className="text-xs font-black">{evt.time}</span>
                 <span className="text-[9px] font-semibold opacity-70">{evt.duration}</span>
               </div>
-
               <div className="flex-1 min-w-0">
                 <h3 className="font-black text-sm leading-snug truncate">{evt.title}</h3>
-
                 {evt.linkedContactId && (
                   <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 truncate">
                     <User size={10} />
                     {contacts.find((c) => String(c.id) === String(evt.linkedContactId))?.name || 'Contact'}
                   </p>
                 )}
-
                 {evt.videoLink && (
                   <button
                     onClick={(e) => {
@@ -352,15 +392,13 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
                   </button>
                 )}
               </div>
-
               <ChevronRight size={16} className="text-slate-300" />
             </div>
           ))
         ) : (
           <div
-            className={`p-10 text-center border-2 border-dashed rounded-3xl h-full flex flex-col justify-center items-center ${
-              userSettings.darkMode ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-400'
-            }`}
+            className={`p-10 text-center border-2 border-dashed rounded-3xl h-full flex flex-col justify-center items-center ${userSettings.darkMode ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-400'
+              }`}
           >
             <p className="text-xs font-semibold">Aucun rendez-vous prévu.</p>
             <button
@@ -386,11 +424,9 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
           CRM
         </button>
       </div>
-
       <div
-        className={`p-5 rounded-[28px] border shadow-sm ${
-          userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'
-        }`}
+        className={`p-5 rounded-[28px] border shadow-sm ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'
+          }`}
       >
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
@@ -406,7 +442,6 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
             <ArrowRight size={16} />
           </button>
         </div>
-
         <div className="space-y-3">
           <div
             className="flex items-center justify-between p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 border border-transparent hover:border-indigo-200 transition-colors cursor-pointer"
@@ -420,7 +455,6 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
             </div>
             <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">{salesKPIs.pipeline}</span>
           </div>
-
           <div
             className="flex items-center justify-between p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-transparent hover:border-blue-200 transition-colors cursor-pointer"
             onClick={() => onNavigate('/groups/crm')}
@@ -431,7 +465,6 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
               </div>
               <span className="text-xs font-black text-blue-900 dark:text-blue-200">Nouvelles demandes</span>
             </div>
-
             {salesKPIs.newRequests > 0 ? (
               <span className="text-xs font-black bg-red-500 text-white px-2 py-0.5 rounded-full animate-pulse">
                 {salesKPIs.newRequests}
@@ -440,7 +473,6 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
               <span className="text-xs font-black text-blue-400">0</span>
             )}
           </div>
-
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800">
             <AlertCircle size={14} className="text-orange-500 shrink-0" />
             <div className="flex-1 min-w-0">
@@ -473,9 +505,8 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
             <div
               key={group.id}
               onClick={() => onGroupClick(group)}
-              className={`p-4 rounded-2xl shadow-sm border-l-4 border-l-violet-500 border-y border-r flex items-center gap-4 cursor-pointer transition-transform hover:translate-x-1 ${
-                userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'
-              }`}
+              className={`p-4 rounded-2xl shadow-sm border-l-4 border-l-violet-500 border-y border-r flex items-center gap-4 cursor-pointer transition-transform hover:translate-x-1 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'
+                }`}
             >
               <div className="flex-1 min-w-0">
                 <h3 className="font-black text-xs leading-snug truncate">{group.name}</h3>
@@ -487,9 +518,8 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
           ))
         ) : (
           <div
-            className={`p-10 text-center border-2 border-dashed rounded-3xl h-full flex flex-col justify-center items-center ${
-              userSettings.darkMode ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-400'
-            }`}
+            className={`p-10 text-center border-2 border-dashed rounded-3xl h-full flex flex-col justify-center items-center ${userSettings.darkMode ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-400'
+              }`}
           >
             <p className="text-xs font-semibold">Aucun groupe en cours.</p>
           </div>
@@ -514,20 +544,17 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
         {pendingTasks.map((task) => (
           <div
             key={task.id}
-            className={`p-4 rounded-2xl shadow-sm border flex items-center gap-4 transition-transform hover:translate-x-1 ${
-              userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'
-            }`}
+            className={`p-4 rounded-2xl shadow-sm border flex items-center gap-4 transition-transform hover:translate-x-1 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'
+              }`}
           >
             <button
               onClick={() => onTaskToggle(task.id)}
-              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-                task.done ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'
-              }`}
+              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${task.done ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'
+                }`}
               aria-label="Toggle task"
             >
               {task.done && <CheckSquare size={12} className="text-white" />}
             </button>
-
             <div className="flex-1 cursor-pointer min-w-0" onClick={() => onTaskClick(task)}>
               <p className={`text-sm font-bold truncate ${task.done ? 'line-through opacity-40' : ''}`}>
                 {task.text}
@@ -538,7 +565,6 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
             </div>
           </div>
         ))}
-
         {pendingTasks.length === 0 && (
           <div className="p-10 text-center border-2 border-dashed rounded-3xl border-emerald-100 bg-emerald-50/20 h-full flex flex-col justify-center items-center">
             <p className="text-emerald-600 text-xs font-black">Tout est sous contrôle !</p>
@@ -554,37 +580,36 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
     </section>
   );
 
-  const renderWidget = (id: string) => {
-    switch (id as WidgetId) {
-      case 'quick_actions':
-        return <WidgetQuickActions />;
-      case 'agenda_today':
-        return <WidgetAgendaToday />;
-      case 'sales_pulse':
-        return <WidgetSalesPulse />;
-      case 'active_groups':
-        return <WidgetActiveGroups />;
-      case 'tasks_focus':
-        return <WidgetTasksFocus />;
-      default:
-        return null;
+  const renderWidget = (id: DashboardWidgetId) => {
+    switch (id) {
+      case 'quick_actions': return <WidgetQuickActions />;
+      case 'agenda_today': return <WidgetAgendaToday />;
+      case 'sales_pulse': return <WidgetSalesPulse />;
+      case 'active_groups': return <WidgetActiveGroups />;
+      case 'tasks_focus': return <WidgetTasksFocus />;
+      case 'spa_requests': return <WidgetSpaRequests requests={spaRequests} onNavigate={onNavigate} darkMode={userSettings.darkMode} />;
+      case 'fnb_calculator': return <WidgetFnbCalculator darkMode={userSettings.darkMode} />;
+      case 'shift_log': return <WidgetShiftLog darkMode={userSettings.darkMode} />;
+      case 'room_status': return <WidgetRoomStatus darkMode={userSettings.darkMode} />;
+      case 'team_chat': return <WidgetTeamChat darkMode={userSettings.darkMode} />;
+      default: return null;
     }
   };
 
   // --- UI: edit panel items list ---
   const PanelItem: React.FC<{ w: DashboardWidgetConfig }> = ({ w }) => {
-    const wid = w.id as WidgetId;
-    const label = titleByWidget[wid] || w.id;
+    // Correction type pour éviter les erreurs si l'ID n'est pas connu
+    const label = titleByWidget[w.id] || w.id;
+    const desc = descByWidget[w.id] || 'Widget';
 
     return (
       <div
-        className={`p-3 rounded-2xl border flex items-start gap-3 ${
-          userSettings.darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-100'
-        }`}
+        className={`p-3 rounded-2xl border flex items-start gap-3 ${userSettings.darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-100'
+          }`}
         draggable
-        onDragStart={() => (dragIdRef.current = w.id)}
+        onDragStart={() => (dragIdRef.current = String(w.id))}
         onDragOver={(e) => e.preventDefault()}
-        onDrop={() => handleDropReorder(w.id)}
+        onDrop={() => handleDropReorder(String(w.id))}
         title="Glisser-déposer pour réordonner"
       >
         <div className="pt-1 text-slate-400">
@@ -595,16 +620,15 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-xs font-black truncate">{label}</p>
-              <p className="text-[10px] text-slate-400 truncate">{descByWidget[wid] || 'Widget'}</p>
+              <p className="text-[10px] text-slate-400 truncate">{desc}</p>
             </div>
 
             <button
-              onClick={() => toggleWidget(w.id)}
-              className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black border ${
-                w.enabled
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                  : 'bg-slate-50 text-slate-500 border-slate-200'
-              }`}
+              onClick={() => toggleWidget(String(w.id))}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black border ${w.enabled
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                : 'bg-slate-50 text-slate-500 border-slate-200'
+                }`}
             >
               {w.enabled ? 'Actif' : 'Masqué'}
             </button>
@@ -615,14 +639,13 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
               {(['sm', 'md', 'lg'] as const).map((s) => (
                 <button
                   key={s}
-                  onClick={() => setWidgetSize(w.id, s)}
-                  className={`px-2 py-1 rounded-lg text-[10px] font-black border transition-colors ${
-                    w.size === s
-                      ? `${themeLight} border-transparent`
-                      : userSettings.darkMode
+                  onClick={() => setWidgetSize(String(w.id), s)}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-black border transition-colors ${w.size === s
+                    ? `${themeLight} border-transparent`
+                    : userSettings.darkMode
                       ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
+                    }`}
                 >
                   {sizeLabel[s]}
                 </button>
@@ -631,23 +654,21 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
 
             <div className="flex items-center gap-1">
               <button
-                onClick={() => swapOrder(w.id, -1)}
-                className={`p-2 rounded-lg border ${
-                  userSettings.darkMode
-                    ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
+                onClick={() => swapOrder(String(w.id), -1)}
+                className={`p-2 rounded-lg border ${userSettings.darkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
                 aria-label="Monter"
               >
                 <ArrowUp size={14} />
               </button>
               <button
-                onClick={() => swapOrder(w.id, 1)}
-                className={`p-2 rounded-lg border ${
-                  userSettings.darkMode
-                    ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
+                onClick={() => swapOrder(String(w.id), 1)}
+                className={`p-2 rounded-lg border ${userSettings.darkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
                 aria-label="Descendre"
               >
                 <ArrowDown size={14} />
@@ -663,23 +684,20 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
     <div className="p-4 md:px-6 md:py-5 space-y-6 animate-in fade-in duration-500 max-w-7xl mx-auto">
       {/* HERO HEADER */}
       <div
-        className={`p-5 md:p-6 rounded-3xl border bg-gradient-to-br from-indigo-500/5 to-purple-500/5 ${
-          userSettings.darkMode ? 'border-slate-800' : 'border-slate-100'
-        }`}
+        className={`p-5 md:p-6 rounded-3xl border bg-gradient-to-br from-indigo-500/5 to-purple-500/5 ${userSettings.darkMode ? 'border-slate-800' : 'border-slate-100'
+          }`}
       >
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div className="min-w-0">
             <p
-              className={`font-semibold text-[10px] uppercase tracking-wider mb-1 ${
-                userSettings.darkMode ? 'text-slate-400' : 'text-slate-500'
-              }`}
+              className={`font-semibold text-[10px] uppercase tracking-wider mb-1 ${userSettings.darkMode ? 'text-slate-400' : 'text-slate-500'
+                }`}
             >
               {prettyDateFR(new Date())}
             </p>
             <h1
-              className={`text-2xl md:text-3xl font-extrabold truncate ${
-                userSettings.darkMode ? 'text-white' : 'text-slate-900'
-              }`}
+              className={`text-2xl md:text-3xl font-extrabold truncate ${userSettings.darkMode ? 'text-white' : 'text-slate-900'
+                }`}
             >
               Bonjour, {userSettings.userName}
             </h1>
@@ -688,11 +706,10 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setEditMode(true)}
-              className={`px-4 py-2 rounded-2xl border shadow-sm text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-colors ${
-                userSettings.darkMode
-                  ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
-                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
+              className={`px-4 py-2 rounded-2xl border shadow-sm text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-colors ${userSettings.darkMode
+                ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
             >
               <Settings2 size={16} />
               Personnaliser
@@ -704,8 +721,8 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
       {/* WIDGETS GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {sortedEnabledWidgets.map((w) => (
-          <div key={w.id} className={widgetColSpan(w.id, w.size)}>
-            {renderWidget(w.id)}
+          <div key={w.id} className={widgetColSpan(String(w.id), w.size)}>
+            {renderWidget(w.id as DashboardWidgetId)}
           </div>
         ))}
       </div>
@@ -715,11 +732,10 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
         <div className="fixed inset-0 z-[80]">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setEditMode(false)} />
           <div
-            className={`absolute right-0 top-0 h-full w-full max-w-xl p-4 md:p-6 overflow-y-auto no-scrollbar border-l ${
-              userSettings.darkMode
-                ? 'bg-slate-900 border-slate-800 text-white'
-                : 'bg-white border-slate-200 text-slate-900'
-            }`}
+            className={`absolute right-0 top-0 h-full w-full max-w-xl p-4 md:p-6 overflow-y-auto no-scrollbar border-l ${userSettings.darkMode
+              ? 'bg-slate-900 border-slate-800 text-white'
+              : 'bg-white border-slate-200 text-slate-900'
+              }`}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -730,11 +746,10 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
               </div>
               <button
                 onClick={() => setEditMode(false)}
-                className={`p-2 rounded-xl border ${
-                  userSettings.darkMode
-                    ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
+                className={`p-2 rounded-xl border ${userSettings.darkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
                 aria-label="Fermer"
               >
                 <X size={16} />
@@ -742,7 +757,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
             </div>
 
             <div className="mt-6 space-y-3">
-              {normalizeWidgets(widgetsDraft).map((w) => (
+              {normalizeWidgets(widgetsDraft, defaults).map((w) => (
                 <PanelItem key={w.id} w={w} />
               ))}
             </div>

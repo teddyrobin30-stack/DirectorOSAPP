@@ -10,7 +10,7 @@ import {
   Home, Users, CheckSquare, Calendar as CalendarIcon,
   Briefcase, Settings, MessageSquare, Loader2, Lock, BarChart3, UsersRound,
   ClipboardList, ChefHat, BedDouble, Wrench, UtensilsCrossed, ArrowLeft,
-  ArrowRight, Bell, Flower2, LogOut, Sparkles
+  ArrowRight, Bell, Flower2, LogOut, Sparkles, ShieldCheck
 } from 'lucide-react';
 
 // --- TYPES & SERVICES ---
@@ -19,7 +19,15 @@ import {
   CatalogItem, Venue, Client, ChatMessage, Room, MaintenanceTicket
 } from './types';
 import { AuthProvider, useAuth } from './services/authContext';
-import { DB_COLLECTIONS, saveDocument, deleteDocument, syncInventory } from './services/db';
+import {
+  DB_COLLECTIONS, syncTasks,
+  syncInventory,
+  syncContacts,
+  syncClients,
+  syncSpaInventory,
+  saveDocument,
+  deleteDocument
+} from './services/db';
 import { INITIAL_BUSINESS_CONFIG, INITIAL_CATALOG, INITIAL_VENUES } from './services/mockData';
 
 // --- HOOKS ---
@@ -58,6 +66,12 @@ import BusinessConfigModal from './components/BusinessConfigModal';
 import StatsModal from './components/StatsModal';
 import ClientDatabaseModal from './components/ClientDatabaseModal';
 
+// ✅ NEW VIEWS
+import SettingsView from './components/SettingsView';
+import AdminPanelView from './components/AdminPanelView';
+import Sidebar from './components/Sidebar';
+import MobileNavBar from './components/MobileNavBar';
+
 const GOOGLE_CLIENT_ID = "";
 
 const AuthenticatedApp: React.FC = () => {
@@ -91,7 +105,10 @@ const AuthenticatedApp: React.FC = () => {
     contacts, todos, groups, rooms, tickets, contracts, inventory, recipes,
     channels, events, leads, clients, inbox, logs, wakeups, taxis, lostItems,
     spaRequests, laundryIssues, ratioItems, ratioCategories, allUsers,
-    setRooms, setTickets, setContracts, setLaundryIssues, setRecipes, setRatioItems, setRatioCategories, setEditContact: setHookContact
+    setRooms, setTickets, setContracts, setLaundryIssues, setRecipes,
+    setRatioItems, setRatioCategories,
+    spaInventory,
+    setSpaInventory
   } = useHotelData(user);
 
   // ✅ SETTINGS (Firestore) — remplace le localStorage
@@ -283,11 +300,14 @@ const AuthenticatedApp: React.FC = () => {
   // if (settingsError) console.warn('Settings error:', settingsError);
 
   return (
-    <div className={`min-h-screen w-full flex flex-col font-sans transition-colors duration-300 ${userSettings.darkMode ? 'bg-slate-900 text-slate-100 dark' : 'bg-slate-50 text-slate-900'}`}>
+    <div className={`min-h-screen w-full flex flex-col md:flex-row font-sans transition-colors duration-300 ${userSettings.darkMode ? 'bg-slate-900 text-slate-100 dark' : 'bg-slate-50 text-slate-900'}`}>
       <InstallPwaPrompt />
 
-      {/* HEADER */}
-      <div className={`sticky top-0 z-40 px-6 py-4 flex justify-between items-center backdrop-blur-md border-b ${userSettings.darkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-slate-50/80 border-slate-200'}`}>
+      {/* ✅ SIDEBAR (DESKTOP) */}
+      <Sidebar userSettings={userSettings} totalUnread={totalUnread} />
+
+      {/* HEADER (MOBILE ONLY) */}
+      <div className={`md:hidden sticky top-0 z-40 px-6 py-4 flex justify-between items-center backdrop-blur-md border-b ${userSettings.darkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-slate-50/80 border-slate-200'}`}>
         <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700`}>
@@ -308,8 +328,8 @@ const AuthenticatedApp: React.FC = () => {
               </>
             )}
 
-            <button onClick={handleOpenSettings} className={`p-2 rounded-lg border shadow-sm transition-colors ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
-              {user.permissions.canManageSettings ? <Settings size={20} /> : <Lock size={20} />}
+            <button onClick={() => navigate('/settings')} className={`p-2 rounded-lg border shadow-sm transition-colors ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
+              <Settings size={20} />
             </button>
 
             {/* USER MENU DROPDOWN */}
@@ -339,58 +359,60 @@ const AuthenticatedApp: React.FC = () => {
       </div>
 
       {/* MAIN CONTENT AREA - ROUTER SWITCH */}
-      <div className="flex-1 w-full overflow-y-auto no-scrollbar pb-28">
+      <div className="flex-1 w-full overflow-y-auto no-scrollbar pb-28 md:pb-0 h-[calc(100vh-80px)] md:h-screen">
         <div className="max-w-7xl mx-auto w-full h-full">
           <AnimatePresence mode='wait'>
             <Routes location={location} key={location.pathname}>
 
               <Route
-  path="/"
-  element={
-    <PageTransition>
-      <MainDashboard
-        userSettings={userSettings}
-        events={events}
-        todos={todos}
-        contacts={contacts}
-        groups={user.permissions.canViewSharedData ? groups : []}
-        leads={leads}
-        inbox={inbox}
-        onNavigate={(path) => navigate(path)}
-        onTaskToggle={(id) =>
-          handleTaskStatusChange(
-            id,
-            todos.find((t) => t.id === id)?.done ? 'En cours' : 'Terminé'
-          )
-        }
-        onTaskClick={(t) => {
-          setEditTask(t);
-          setShowTaskModal(true);
-        }}
-        onEventClick={(e) => {
-          setEditEvent(e);
-          setShowEventModal(true);
-        }}
-        onGroupClick={setSelectedGroupDetail}
-        onOpenEventModal={() => {
-          setEditEvent(null);
-          setShowEventModal(true);
-        }}
-        onOpenTaskModal={() => {
-          setEditTask(null);
-          setShowTaskModal(true);
-        }}
-        onOpenContactModal={() => {
-          setEditContact(null);
-          setShowContactModal(true);
-        }}
-        onSaveDashboardWidgets={(widgets) =>
-          saveSettings({ dashboardWidgets: widgets })
-        }
-      />
-    </PageTransition>
-  }
-/>
+                path="/"
+                element={
+                  <PageTransition>
+                    <MainDashboard
+                      userSettings={userSettings}
+                      userRole={user?.role}
+                      events={events}
+                      todos={todos}
+                      contacts={contacts}
+                      groups={user.permissions.canViewSharedData ? groups : []}
+                      leads={leads}
+                      inbox={inbox}
+                      spaRequests={spaRequests}
+                      onNavigate={(path) => navigate(path)}
+                      onTaskToggle={(id) =>
+                        handleTaskStatusChange(
+                          id,
+                          todos.find((t) => t.id === id)?.done ? 'En cours' : 'Terminé'
+                        )
+                      }
+                      onTaskClick={(t) => {
+                        setEditTask(t);
+                        setShowTaskModal(true);
+                      }}
+                      onEventClick={(e) => {
+                        setEditEvent(e);
+                        setShowEventModal(true);
+                      }}
+                      onGroupClick={setSelectedGroupDetail}
+                      onOpenEventModal={() => {
+                        setEditEvent(null);
+                        setShowEventModal(true);
+                      }}
+                      onOpenTaskModal={() => {
+                        setEditTask(null);
+                        setShowTaskModal(true);
+                      }}
+                      onOpenContactModal={() => {
+                        setEditContact(null);
+                        setShowContactModal(true);
+                      }}
+                      onSaveDashboardWidgets={(widgets) =>
+                        saveSettings({ dashboardWidgets: widgets })
+                      }
+                    />
+                  </PageTransition>
+                }
+              />
 
 
 
@@ -477,7 +499,13 @@ const AuthenticatedApp: React.FC = () => {
               <Route path="/spa" element={
                 user.permissions.canViewSpa ?
                   <PageTransition>
-                    <SpaView userSettings={userSettings} requests={spaRequests} onUpdateRequests={(r) => { r.forEach(req => saveDocument(DB_COLLECTIONS.SPA, req)); }} />
+                    <SpaView
+                      userSettings={userSettings}
+                      requests={spaRequests}
+                      onUpdateRequests={(r) => { r.forEach(req => saveDocument(DB_COLLECTIONS.SPA, req)); }}
+                      spaInventory={spaInventory}
+                      onUpdateInventory={(items) => syncSpaInventory(items)}
+                    />
                   </PageTransition>
                   : <Navigate to="/" />
               } />
@@ -604,6 +632,20 @@ const AuthenticatedApp: React.FC = () => {
                   : <Navigate to="/" />
               } />
 
+              {/* ✅ NOUVELLES ROUTES SETTINGS & ADMIN */}
+              <Route path="/settings" element={
+                <PageTransition>
+                  <SettingsView userSettings={userSettings} onSave={(s) => { setUserSettings(s); saveSettings(s); }} onNavigate={(path) => navigate(path)} />
+                </PageTransition>
+              } />
+
+              <Route path="/admin" element={
+                (user.role === 'admin' || user.role === 'manager') ?
+                  <PageTransition>
+                    <AdminPanelView userSettings={userSettings} onNavigate={(path) => navigate(path)} />
+                  </PageTransition> : <Navigate to="/" />
+              } />
+
             </Routes>
           </AnimatePresence>
         </div>
@@ -611,47 +653,8 @@ const AuthenticatedApp: React.FC = () => {
 
       <button onClick={() => setShowAiAssistant(true)} className="fixed bottom-24 right-6 md:bottom-10 md:right-10 z-[100] w-14 h-14 bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 group"><Sparkles size={24} className="animate-pulse group-hover:animate-none" /></button>
 
-      {/* NAVIGATION BAR - NavLink */}
-      <div className={`fixed bottom-0 left-0 right-0 border-t backdrop-blur-xl z-50 pb-safe ${userSettings.darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
-        <div className="max-w-2xl mx-auto flex justify-between items-center p-2 overflow-x-auto no-scrollbar">
-          {[
-            { to: '/', icon: Home, label: 'Accueil', access: true, end: true },
-            { to: '/agenda', icon: CalendarIcon, label: 'Agenda', access: user.permissions.canViewAgenda },
-            { to: '/reception', icon: Bell, label: 'Réception', access: user.permissions.canViewReception },
-            { to: '/spa', icon: Flower2, label: 'Spa', access: user.permissions.canViewSpa },
-            { to: '/todo', icon: CheckSquare, label: 'Tâches', access: true },
-            { to: '/messaging', icon: MessageSquare, label: 'Messages', badge: totalUnread, access: user.permissions.canViewMessaging },
-            { to: '/housekeeping', icon: BedDouble, label: 'Hébergement', access: user.permissions.canViewHousekeeping },
-            { to: '/maintenance', icon: Wrench, label: 'Maintenance', access: user.permissions.canViewMaintenance },
-            { to: '/contacts', icon: Users, label: 'VIP', access: true },
-            { to: '/groups', icon: Briefcase, label: 'Groupes', access: user.permissions.canViewSharedData, partial: true },
-            { to: '/fnb', icon: UtensilsCrossed, label: 'Gestion F&B', access: user.permissions.canViewFnb, partial: true },
-          ].filter(item => item.access).map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => {
-                const isParentActive = (item as any).partial && location.pathname.startsWith(item.to);
-                const active = isActive || isParentActive;
-                return `flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl transition-all relative min-w-[60px] ${
-                  active
-                    ? `bg-${userSettings.themeColor}-50 text-${userSettings.themeColor}-600 dark:bg-slate-800 dark:text-${userSettings.themeColor}-400`
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-                }`;
-              }}
-            >
-              <item.icon size={20} strokeWidth={2} />
-              {(item as any).badge ? (
-                <span className="absolute top-2 right-2 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900">
-                  {(item as any).badge}
-                </span>
-              ) : null}
-              <span className="text-[9px] font-bold hidden md:block opacity-60">{item.label}</span>
-            </NavLink>
-          ))}
-        </div>
-      </div>
+      {/* NAVIGATION BAR - MobileNavBar (MOBILE ONLY) */}
+      <MobileNavBar userSettings={userSettings} totalUnread={totalUnread} />
 
       {/* GLOBAL MODALS */}
       <AiAssistant isOpen={showAiAssistant} onClose={() => setShowAiAssistant(false)} userSettings={userSettings} tasks={todos} contacts={contacts} rooms={rooms} inventory={inventory} maintenance={tickets} />

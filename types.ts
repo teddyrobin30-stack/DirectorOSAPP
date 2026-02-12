@@ -12,6 +12,11 @@ export type DashboardWidgetId =
   | 'sales_pulse'
   | 'active_groups'
   | 'tasks_focus'
+  | 'spa_requests'
+  | 'fnb_calculator'
+  | 'shift_log'
+  | 'room_status'
+  | 'team_chat';
 
 export type DashboardWidgetSize = 'sm' | 'md' | 'lg';
 
@@ -206,14 +211,14 @@ export interface InboxItem {
   phone: string;
   requestDate: string; // Date de création (reçu le...)
   source: InboxSource;
-  
+
   // Nouveaux champs pour le traitement
   status: 'to_process' | 'processed' | 'archived'; // Statut global (Technique)
   processingStatus?: 'not_started' | 'in_progress' | 'finished'; // État d'avancement
   assignee?: string; // Qui est en charge
   quoteSent?: boolean; // Devis envoyé ?
   lastFollowUp?: string; // Date de relance
-  
+
   eventStartDate?: string;
   eventEndDate?: string;
   note?: string;
@@ -244,6 +249,7 @@ export interface Client {
   address: string;
   siret?: string;
   companyName?: string;
+  company?: string; // ✅ Alias pour compatibilité
   category?: string;
   vat?: string;
   notes?: string;
@@ -273,6 +279,7 @@ export interface UserProfile {
   email: string;
   displayName: string;
   role: UserRole;
+  phone?: string; // ✅ Ajouté pour transmission lead
   permissions: UserPermissions;
   createdAt: number;
 }
@@ -286,6 +293,21 @@ export interface ChatMessage {
   senderName: string;
   text: string;
   timestamp: string;
+  attachments?: Attachment[];
+  reactions?: any[];
+}
+
+export interface ChatChannel {
+  id: string;
+  type: 'group' | 'direct';
+  name: string;
+  participants: string[];
+  allowedUserIds?: string[]; // ✅ [NEW] Privacy
+  messages: ChatMessage[];
+  unreadCount: number;
+  lastUpdate: string;
+  isOnline?: boolean;
+  lastMessage?: string;
 }
 
 export interface Room {
@@ -322,3 +344,64 @@ export interface Venue { id: string; name: string; }
 export interface CatalogItem { id: string; name: string; defaultPrice: number; }
 export interface BusinessConfig { companyName: string; }
 export interface InventoryItem { id: string; name: string; currentQty: number; }
+
+export type SpaStatus = 'pending' | 'confirmed' | 'refused';
+export type SpaRefusalReason = 'complet_cabine' | 'complet_soin' | 'contre_indication' | 'annulation' | 'autre';
+
+export type SpaSource = 'Direct' | 'Extérieur' | 'Weekendesk' | 'Thalasseo' | 'Sport Découverte' | 'Thalasso n°1' | 'Saisie Manuelle';
+
+export interface SpaRequest {
+  id: string;
+  clientName: string;
+  phone: string;
+  email?: string;
+  date: string;
+  time: string;
+  treatment: string;
+  status: SpaStatus;
+  refusalReason?: SpaRefusalReason; // Si refusé
+  source?: string; // NEW: Source de la réservation (Type string pour permettre "Saisie Manuelle" custom)
+  createdAt: string;
+}
+
+export type SpaInventoryCategory = 'Huiles & Crèmes' | 'Linge' | 'Consommables' | 'Entretien';
+
+export interface SpaInventoryItem {
+  id: string;
+  name: string;
+  category: SpaInventoryCategory;
+  quantity: number;
+  minQuantity: number; // Seuil d'alerte
+  unit: string; // ml, L, pièce
+  unitCost: number; // NEW: Coût unitaire
+  updatedAt: string;
+}
+
+// --- MISSING TYPES ADDED ---
+export interface MaintenanceContract {
+  id: string; providerName: string; description: string; startDate: string; endDate: string; status: 'active' | 'expired';
+}
+export interface LogEntry {
+  id: string; date: string; message: string; author: string; category: 'info' | 'alert' | 'task';
+}
+export interface WakeUpCall {
+  id: string; roomNumber: string; time: string; date: string; status: 'pending' | 'completed';
+}
+export interface TaxiBooking {
+  id: string; clientName: string; pickupTime: string; destination: string; status: 'confirmed' | 'cancelled';
+}
+export interface LostItem {
+  id: string; description: string; locationFound: string; dateFound: string; status: 'stored' | 'returned';
+}
+export interface MonthlyInventory {
+  monthId: string; status: 'open' | 'closed'; closedAt?: string; items: InventoryItem[];
+}
+export interface RecipeIngredient {
+  name: string; qty: number; unit: string; cost: number;
+}
+export interface Recipe {
+  id: string; name: string; category: string; ingredients: RecipeIngredient[]; totalCost: number; portionPrice?: number;
+}
+export interface RatioItem {
+  id: string; name: string; cost: number; price: number; ratio: number;
+}

@@ -5,7 +5,7 @@ import {
   Clock, CheckCircle2, XCircle, Search, Inbox, Users, Globe,
   Archive, Download, ArrowDownUp, Check, X,
   LayoutList, CalendarDays, ChevronLeft, ChevronRight, Trash2,
-  PieChart, RotateCcw, FolderOpen
+  PieChart, RotateCcw, FolderOpen, Send
 } from 'lucide-react';
 
 // TYPES
@@ -18,7 +18,7 @@ import {
 // HOOKS & SERVICES
 import { useCrmPipeline } from '../hooks/useCrmPipeline';
 import { useCrmInbox } from '../hooks/useCrmInbox';
-import { 
+import {
   safeLower, safeDate, checkIsOverdue, checkAlerts, canValidateLead,
   buildMessage, openSMS, openWhatsApp, defaultRooms
 } from '../services/crmUtils';
@@ -41,7 +41,7 @@ const toDateInputValue = (v?: string) => {
 const isOverdueAlert = (dateRelance?: string): boolean => {
   if (!dateRelance) return false;
   const targetDate = new Date(dateRelance);
-  targetDate.setDate(targetDate.getDate() + 7); 
+  targetDate.setDate(targetDate.getDate() + 7);
   return new Date() > targetDate;
 };
 
@@ -55,17 +55,17 @@ const useInboxFilter = (items: ExtendedInboxItem[], filters: any) => {
 
       // Filtre Statut Métier
       if (filters.status !== 'all' && (item.statut || 'pas_commence') !== filters.status) return false;
-      
+
       // Filtre Responsable
       if (filters.responsable && !item.responsable?.toLowerCase().includes(filters.responsable.toLowerCase())) return false;
-      
+
       // Filtre Retard
       if (filters.onlyOverdue && !isOverdueAlert(item.dateRelance)) return false;
-      
+
       // Filtre Recherche Globale (State existant inboxState.search)
       // Ce filtre est souvent géré en amont ou en aval, ici on l'intègre si besoin ou on laisse le filtre global agir.
       // Pour l'instant on garde la logique de props filters.
-      
+
       return true;
     });
 
@@ -118,18 +118,18 @@ interface SalesCRMViewProps {
 }
 
 const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
-  const { 
-    userSettings, 
-    leads, 
-    onUpdateLeads, 
-    inbox = [], 
-    onUpdateInbox, 
-    contacts, 
-    onUpdateContacts, 
-    clients = [], 
+  const {
+    userSettings,
+    leads,
+    onUpdateLeads,
+    inbox = [],
+    onUpdateInbox,
+    contacts,
+    onUpdateContacts,
+    clients = [],
     onUpdateClients,
-    users, 
-    onNavigate 
+    users,
+    onNavigate
   } = props;
 
   // HOOKS
@@ -144,10 +144,12 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pipelineViewMode, setPipelineViewMode] = useState<'list' | 'calendar'>('list');
   const [calendarDate, setCalendarDate] = useState(() => new Date());
-  
+  const [selectedTeamMemberId, setSelectedTeamMemberId] = useState<string>(''); // [NEW] Pour transmission rapide
+  const [selectedInboxTeamMemberId, setSelectedInboxTeamMemberId] = useState<string>(''); // [NEW] Pour transmission Inbox
+
   // Filtre recherche Contacts
   const [contactSearch, setContactSearch] = useState('');
-  
+
   // État pour la fiche détail contact (Modal)
   const [viewingContact, setViewingContact] = useState<any | null>(null);
 
@@ -168,10 +170,10 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   // On combine la recherche textuelle simple (inboxState.search) avec nos filtres avancés
   const filteredInbox = useInboxFilter(
     (inbox as ExtendedInboxItem[]).filter(i => {
-       if (!inboxState.search) return true;
-       const s = inboxState.search.toLowerCase();
-       return i.contactName.toLowerCase().includes(s) || i.companyName?.toLowerCase().includes(s) || i.email.includes(s);
-    }), 
+      if (!inboxState.search) return true;
+      const s = inboxState.search.toLowerCase();
+      return i.contactName.toLowerCase().includes(s) || i.companyName?.toLowerCase().includes(s) || i.email.includes(s);
+    }),
     inboxFilters
   );
 
@@ -193,10 +195,10 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const days: (Date | null)[] = [];
-    
+
     let startDay = firstDay.getDay(); // 0=Sun
     startDay = startDay === 0 ? 6 : startDay - 1; // Mon=0
-    
+
     for (let i = 0; i < startDay; i++) days.push(null);
     for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
     return days;
@@ -208,14 +210,14 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
       const start = new Date(l.startDate);
       const end = l.endDate ? new Date(l.endDate) : new Date(start);
       const check = new Date(date);
-      check.setHours(0,0,0,0); start.setHours(0,0,0,0); end.setHours(0,0,0,0);
+      check.setHours(0, 0, 0, 0); start.setHours(0, 0, 0, 0); end.setHours(0, 0, 0, 0);
       return check >= start && check <= end;
     });
   };
 
   // Normalisation Contacts et Tri VIP
   const appContacts = useMemo(() => Array.isArray(contacts) ? contacts : clients, [contacts, clients]);
-  
+
   const vipCandidates = useMemo(() => {
     const arr = [...(appContacts || [])];
     arr.sort((a, b) => {
@@ -232,7 +234,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   const filteredGridContacts = useMemo(() => {
     if (!contactSearch) return vipCandidates;
     const lower = contactSearch.toLowerCase();
-    return vipCandidates.filter((c: any) => 
+    return vipCandidates.filter((c: any) =>
       (c.name && c.name.toLowerCase().includes(lower)) ||
       (c.company && c.company.toLowerCase().includes(lower)) ||
       (c.companyName && c.companyName.toLowerCase().includes(lower))
@@ -244,15 +246,15 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     if (!selectedInboxVipId) return null;
     return appContacts.find((x: any) => String(x.id) === selectedInboxVipId);
   }, [selectedInboxVipId, appContacts]);
-  
+
   // Utilisation sécurisée de onUpdateClients via updateAppContacts si besoin
   const updateAppContacts = (next: any[]) => onUpdateContacts ? onUpdateContacts(next) : onUpdateClients?.(next);
 
   // Helper pour l'historique contact
   const getContactHistory = (contact: any) => {
     if (!contact) return { total: 0, validated: 0, history: [] };
-    const history = leads.filter(l => 
-      safeLower(l.contactName) === safeLower(contact.name) || 
+    const history = leads.filter(l =>
+      safeLower(l.contactName) === safeLower(contact.name) ||
       safeLower(l.email) === safeLower(contact.email)
     );
     const validated = history.filter(l => l.status === 'valide').length;
@@ -281,10 +283,10 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   // ✅ LOGIQUE D'ARCHIVAGE (Correction du bug de suppression)
   const handleArchiveLead = (lead: Lead) => {
     if (window.confirm("Voulez-vous archiver ce dossier ? Il ne sera plus visible dans le pipeline.")) {
-        onUpdateLeads(leads.map(l => String(l.id) === String(lead.id) ? { ...l, status: 'archived' } : l));
-        setSelectedLead(null);
-        setToastMessage("Dossier archivé avec succès");
-        setTimeout(() => setToastMessage(null), 3000);
+      onUpdateLeads(leads.map(l => String(l.id) === String(lead.id) ? { ...l, status: 'archived' } : l));
+      setSelectedLead(null);
+      setToastMessage("Dossier archivé avec succès");
+      setTimeout(() => setToastMessage(null), 3000);
     }
   };
 
@@ -296,21 +298,21 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
   const handleDeleteDefinitely = (id: string | number) => {
     if (window.confirm("ATTENTION : Suppression définitive. Continuer ?")) {
-        onUpdateLeads(leads.filter(l => String(l.id) !== String(id)));
+      onUpdateLeads(leads.filter(l => String(l.id) !== String(id)));
     }
   };
 
   const handleValidateRequest = (item: InboxItem) => {
-    setForm({ 
-      groupName: item.companyName ? `Groupe ${item.companyName}` : `Event ${item.contactName}`, 
-      contactName: item.contactName, 
-      email: item.email, 
-      phone: item.phone, 
-      startDate: item.eventStartDate || '', 
-      endDate: item.eventEndDate || '', 
-      note: `Source: ${item.source.toUpperCase()}.`, 
-      rooms: (item as any).rooms || defaultRooms(), 
-      pax: 0 
+    setForm({
+      groupName: item.companyName ? `Groupe ${item.companyName}` : `Event ${item.contactName}`,
+      contactName: item.contactName,
+      email: item.email,
+      phone: item.phone,
+      startDate: item.eventStartDate || '',
+      endDate: item.eventEndDate || '',
+      note: `Source: ${item.source.toUpperCase()}.`,
+      rooms: (item as any).rooms || defaultRooms(),
+      pax: 0
     });
     // On passe le statut technique à processed
     onUpdateInbox?.(inbox.map(i => i.id === item.id ? { ...i, status: 'processed' } : i));
@@ -318,11 +320,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   };
 
   const handleArchiveRequest = (id: string | number) => {
-     if(window.confirm("Archiver cette demande de l'Inbox ?")) {
-        onUpdateInbox?.(inbox.map(i => i.id === id ? { ...i, status: 'archived' } : i));
-        setToastMessage('Demande archivée');
-        setTimeout(() => setToastMessage(null), 3000);
-     }
+    if (window.confirm("Archiver cette demande de l'Inbox ?")) {
+      onUpdateInbox?.(inbox.map(i => i.id === id ? { ...i, status: 'archived' } : i));
+      setToastMessage('Demande archivée');
+      setTimeout(() => setToastMessage(null), 3000);
+    }
   };
 
   // ✅ EXPORT INBOX
@@ -365,7 +367,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
   return (
     <div className={`h-full flex flex-col overflow-hidden animate-in fade-in relative ${userSettings.darkMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'}`}>
-      
+
       {toastMessage && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl z-[100] flex items-center gap-3 animate-in slide-in-from-bottom-5">
           <CheckCircle2 size={16} className="text-emerald-500" />
@@ -390,40 +392,40 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
       {/* TABS - STYLE STABLE & TACTILE */}
       <div className="px-6 py-4">
         <div className="flex p-1 rounded-2xl bg-slate-200 dark:bg-slate-800 w-fit overflow-x-auto whitespace-nowrap max-w-full no-scrollbar px-2">
-          
-          <button 
-            onClick={() => setActiveTab('pipeline')} 
+
+          <button
+            onClick={() => setActiveTab('pipeline')}
             className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'pipeline' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
           >
-            <Filter size={14}/> Pipeline
+            <Filter size={14} /> Pipeline
           </button>
 
-          <button 
-            onClick={() => setActiveTab('inbox')} 
+          <button
+            onClick={() => setActiveTab('inbox')}
             className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'inbox' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
           >
-            <Inbox size={14}/> Inbox
+            <Inbox size={14} /> Inbox
           </button>
 
-          <button 
-            onClick={() => setActiveTab('contacts')} 
+          <button
+            onClick={() => setActiveTab('contacts')}
             className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'contacts' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
           >
-            <Users size={14}/> Contacts
+            <Users size={14} /> Contacts
           </button>
 
-          <button 
-            onClick={() => setActiveTab('archives')} 
+          <button
+            onClick={() => setActiveTab('archives')}
             className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'archives' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
           >
-            <Archive size={14}/> Archives
+            <Archive size={14} /> Archives
           </button>
 
-          <button 
-            onClick={() => setActiveTab('new_lead')} 
+          <button
+            onClick={() => setActiveTab('new_lead')}
             className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'new_lead' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600' : 'text-slate-500'}`}
           >
-            <Plus size={14}/> Nouveau Lead
+            <Plus size={14} /> Nouveau Lead
           </button>
 
         </div>
@@ -453,11 +455,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                   <option value="alpha">Abc Alphabétique</option>
                 </select>
                 <div className="flex gap-2 overflow-x-auto no-scrollbar">
-                   {['ALL', 'URGENT_ARRIVAL', 'LATE_FOLLOWUP', 'THIS_MONTH'].map(f => (
-                     <button key={f} onClick={() => pipelineState.setFilter(f)} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border whitespace-nowrap ${pipelineState.filter === f ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>
-                       {f === 'ALL' ? 'Tous' : f === 'URGENT_ARRIVAL' ? '🚨 J-30' : f === 'LATE_FOLLOWUP' ? '⚠️ Relance' : '📅 Ce Mois'}
-                     </button>
-                   ))}
+                  {['ALL', 'URGENT_ARRIVAL', 'LATE_FOLLOWUP', 'THIS_MONTH'].map(f => (
+                    <button key={f} onClick={() => pipelineState.setFilter(f)} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border whitespace-nowrap ${pipelineState.filter === f ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>
+                      {f === 'ALL' ? 'Tous' : f === 'URGENT_ARRIVAL' ? '🚨 J-30' : f === 'LATE_FOLLOWUP' ? '⚠️ Relance' : '📅 Ce Mois'}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -519,7 +521,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
             <div className={`flex-1 rounded-[32px] border overflow-hidden flex flex-col ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
               {selectedLead ? (
-                <div className="flex flex-col h-full p-8">
+                <div className="flex flex-col h-full p-8 overflow-y-auto no-scrollbar">
                   <div className="flex justify-between items-start mb-6">
                     <div>
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dossier #{selectedLead.id.toString().slice(-4)}</span>
@@ -545,6 +547,88 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     </div>
                   </div>
 
+                  {/* ✅ TRANSMISSION DU LEAD */}
+                  <div className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 mb-8">
+                    <h4 className="text-[10px] font-black uppercase text-slate-400 mb-3 flex items-center gap-2">
+                      <Send size={12} /> Transmettre l'info à...
+                    </h4>
+                    <div className="flex gap-3">
+                      <select
+                        className="flex-1 p-2 rounded-xl bg-white dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 outline-none text-xs font-bold"
+                        onChange={(e) => {
+                          const u = users.find(u => u.uid === e.target.value);
+                          if (u && u.phone) {
+                            // Pré-selection ou action directe ? 
+                            // Ici on stocke juste l'ID ou on déclenche ? 
+                            // Pour simplifier, on pourrait juste avoir des boutons qui utilisent le numéro du user séléctionné.
+                            // Mais l'UI demandée est "Une fois choisi... affiche les 3 boutons".
+                            // On va utiliser un state local pour ce selecteur s'il n'existe pas.
+                            // Pour l'instant, faisons simple : Select + Boutons actifs si selection.
+                            const btn = document.getElementById('transmit-actions');
+                            if (btn) btn.style.display = 'flex';
+                            // On stocke l'user target dans un data attribute du container pour les boutons
+                            const container = document.getElementById('transmit-container');
+                            if (container) container.dataset.targetPhone = u.phone;
+                            if (container) container.dataset.targetName = u.displayName || u.email;
+                            if (container) container.dataset.targetEmail = u.email;
+                          }
+                        }}
+                      >
+                        <option value="">Choisir un membre...</option>
+                        {users.map(u => (
+                          <option key={u.uid} value={u.uid}>{u.displayName || u.email} ({u.role})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Actions cachées par défaut, affichées via JS simple ou state si on refactorait tout le composant */}
+                    <div id="transmit-container" className="mt-3 grid grid-cols-3 gap-2">
+                      <button
+                        onClick={(e) => {
+                          const container = document.getElementById('transmit-container');
+                          const phone = container?.dataset.targetPhone;
+                          const name = container?.dataset.targetName;
+                          if (!phone) return alert("Ce membre n'a pas de numéro renseigné.");
+
+                          const msg = `Salut ${name}, peux-tu regarder ce lead ?\nClient: ${selectedLead.contactName}\nDate: ${selectedLead.requestDate}\nNote: ${selectedLead.note || 'Aucune'}`;
+                          openWhatsApp(phone, msg);
+                        }}
+                        className="py-2.5 rounded-xl bg-emerald-100 text-emerald-700 hover:bg-emerald-200 text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Phone size={14} /> WhatsApp
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          const container = document.getElementById('transmit-container');
+                          const phone = container?.dataset.targetPhone;
+                          const name = container?.dataset.targetName;
+                          if (!phone) return alert("Ce membre n'a pas de numéro renseigné.");
+
+                          const msg = `Salut ${name}, peux-tu regarder ce lead ?\nClient: ${selectedLead.contactName}\nDate: ${selectedLead.requestDate}\nNote: ${selectedLead.note || 'Aucune'}`;
+                          openSMS(phone, msg);
+                        }}
+                        className="py-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Briefcase size={14} /> SMS
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          const container = document.getElementById('transmit-container');
+                          const email = container?.dataset.targetEmail;
+                          const name = container?.dataset.targetName;
+                          if (!email) return alert("Ce membre n'a pas d'email renseigné.");
+
+                          const subject = `Transfert Lead : ${selectedLead.groupName}`;
+                          const body = `Salut ${name},\n\nPeux-tu regarder ce lead ?\n\nClient : ${selectedLead.contactName}\nGroupe : ${selectedLead.groupName}\nDate demande : ${new Date(selectedLead.requestDate).toLocaleDateString()}\n\nNote : ${selectedLead.note || ''}\n\nMerci.`;
+                          window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+                        }}
+                        className="py-2.5 rounded-xl bg-blue-100 text-blue-700 hover:bg-blue-200 text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Mail size={14} /> Email
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="p-6 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/20 mb-8">
                     <h4 className="text-sm font-black uppercase text-indigo-900 dark:text-indigo-200 mb-4 flex items-center gap-2"><CheckSquare size={16} /> Checklist Validation</h4>
                     <div className="space-y-3">
@@ -557,11 +641,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     </div>
                   </div>
 
-                  <textarea className="flex-1 w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl outline-none text-sm font-medium resize-none" value={selectedLead.note} onChange={(e) => handleUpdateLead({ ...selectedLead, note: e.target.value })} placeholder="Notes internes et historique..." />
-                  
+                  <textarea className="flex-1 w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl outline-none text-sm font-medium resize-none min-h-[100px]" value={selectedLead.note} onChange={(e) => handleUpdateLead({ ...selectedLead, note: e.target.value })} placeholder="Notes internes et historique..." />
+
                   {/* BOUTON ARCHIVER */}
                   <div className="pt-6 flex justify-end">
-                    <button 
+                    <button
                       onClick={() => handleArchiveLead(selectedLead)}
                       className="text-orange-400 hover:text-orange-600 text-xs font-black uppercase flex items-center gap-2"
                     >
@@ -585,11 +669,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
             <div className={`w-full md:w-1/3 p-6 rounded-[32px] border overflow-y-auto ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
               <h3 className="text-lg font-black uppercase mb-4">Saisie Rapide</h3>
               <div className="space-y-4">
-                
+
                 {/* ✅ SÉLECTEUR DE CONTACT DANS L'INBOX */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
-                  <select 
+                  <select
                     className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none"
                     value={selectedInboxVipId}
                     onChange={(e) => {
@@ -662,6 +746,65 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                   </div>
                 </div>
 
+                {/* ✅ BLOC TRANSMISSION ÉQUIPE INBOX (Même style) */}
+                <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-100 dark:border-indigo-900/50 relative overflow-hidden">
+                  <h4 className="text-[10px] font-black uppercase text-indigo-800 dark:text-indigo-200 mb-2 flex items-center gap-2">
+                    📣 Transmettre à l'équipe
+                  </h4>
+
+                  <div className="flex flex-col gap-2">
+                    <select
+                      className="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-[10px]"
+                      value={selectedInboxTeamMemberId}
+                      onChange={(e) => setSelectedInboxTeamMemberId(e.target.value)}
+                    >
+                      <option value="">-- Choisir un membre --</option>
+                      {users.map(u => (
+                        <option key={u.uid} value={u.uid}>{u.displayName || u.email} ({u.role})</option>
+                      ))}
+                    </select>
+
+                    {selectedInboxTeamMemberId && (
+                      <div className="grid grid-cols-3 gap-1 animate-in slide-in-from-top-2 fade-in">
+                        <button
+                          onClick={() => {
+                            const u = users.find(x => x.uid === selectedInboxTeamMemberId);
+                            if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
+                            const msg = `Salut ${u.displayName}, nouveau lead (Quick Entry) :\nClient: ${inboxForm.contactName}\nDate: ${inboxForm.eventStartDate}\nNote: ${inboxForm.note || 'Aucune'}`;
+                            openWhatsApp(u.phone, msg);
+                          }}
+                          className="py-1.5 rounded-lg bg-emerald-500 text-white font-black text-[9px] uppercase flex flex-col items-center gap-0.5 shadow-sm hover:bg-emerald-600 transition-colors"
+                        >
+                          <Phone size={12} /> WhatsApp
+                        </button>
+                        <button
+                          onClick={() => {
+                            const u = users.find(x => x.uid === selectedInboxTeamMemberId);
+                            if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
+                            const msg = `Salut ${u.displayName}, nouveau lead (Quick Entry) :\nClient: ${inboxForm.contactName}\nDate: ${inboxForm.eventStartDate}\nNote: ${inboxForm.note || 'Aucune'}`;
+                            openSMS(u.phone, msg);
+                          }}
+                          className="py-1.5 rounded-lg bg-slate-700 text-white font-black text-[9px] uppercase flex flex-col items-center gap-0.5 shadow-sm hover:bg-slate-800 transition-colors"
+                        >
+                          <Briefcase size={12} /> SMS
+                        </button>
+                        <button
+                          onClick={() => {
+                            const u = users.find(x => x.uid === selectedInboxTeamMemberId);
+                            if (!u?.email) return alert("Pas d'email renseigné pour ce membre.");
+                            const subject = `Nouveau Lead : ${inboxForm.companyName || inboxForm.contactName}`;
+                            const body = `Salut ${u.displayName},\n\nNouveau lead (Quick Entry) :\n\nClient : ${inboxForm.contactName}\nDate : ${inboxForm.eventStartDate}\n\nNote : ${inboxForm.note || ''}`;
+                            window.open(`mailto:${u.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+                          }}
+                          className="py-1.5 rounded-lg bg-blue-500 text-white font-black text-[9px] uppercase flex flex-col items-center gap-0.5 shadow-sm hover:bg-blue-600 transition-colors"
+                        >
+                          <Mail size={12} /> Email
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <input type="text" placeholder="Nom Contact *" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.contactName} onChange={(e) => setInboxForm({ ...inboxForm, contactName: e.target.value })} />
                 <input type="text" placeholder="Entreprise" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.companyName} onChange={(e) => setInboxForm({ ...inboxForm, companyName: e.target.value })} />
                 <input type="email" placeholder="Email" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.email} onChange={(e) => setInboxForm({ ...inboxForm, email: e.target.value })} />
@@ -675,67 +818,67 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     <button key={s} onClick={() => setInboxForm({ ...inboxForm, source: s })} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase border ${inboxForm.source === s ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>{s}</button>
                   ))}
                 </div>
-                <button onClick={() => { onUpdateInbox?.([ { ...inboxForm, id: uid('inbox'), status: 'to_process', requestDate: new Date().toISOString() }, ...inbox ]); setInboxForm({ contactName: '', companyName: '', email: '', phone: '', source: 'email', rooms: defaultRooms() }); setSelectedInboxVipId(''); }} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 transition-all">Enregistrer Demande</button>
+                <button onClick={() => { onUpdateInbox?.([{ ...inboxForm, id: uid('inbox'), status: 'to_process', requestDate: new Date().toISOString() }, ...inbox]); setInboxForm({ contactName: '', companyName: '', email: '', phone: '', source: 'email', rooms: defaultRooms() }); setSelectedInboxVipId(''); }} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 transition-all">Enregistrer Demande</button>
               </div>
             </div>
 
             <div className="flex-1 flex flex-col h-full overflow-hidden">
               <div className="mb-4 p-4 rounded-[24px] border bg-white dark:bg-slate-800 flex flex-col gap-4">
-                 {/* Barre de recherche Globale */}
-                 <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border w-full">
-                    <Search size={16} className="text-slate-400 mr-2" />
-                    <input type="text" placeholder="Filtrer l'inbox (nom, société, email)..." value={inboxState.search} onChange={(e) => inboxState.setSearch(e.target.value)} className="bg-transparent outline-none w-full text-xs font-bold" />
-                 </div>
-                 
-                 {/* [NEW] BARRE DE FILTRES AVANCÉE */}
-                 <div className="flex flex-wrap gap-2 items-center">
-                    <select 
-                      value={inboxFilters.status}
-                      onChange={(e) => setInboxFilters({...inboxFilters, status: e.target.value})}
-                      className="bg-white dark:bg-slate-900 border dark:border-slate-700 text-[10px] font-black uppercase py-2 px-3 rounded-lg outline-none cursor-pointer"
-                    >
-                      <option value="all">Tous Status</option>
-                      <option value="pas_commence">⚪ À Traiter</option>
-                      <option value="en_cours">🔵 En cours</option>
-                      <option value="termine">🟢 Terminé</option>
-                    </select>
+                {/* Barre de recherche Globale */}
+                <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border w-full">
+                  <Search size={16} className="text-slate-400 mr-2" />
+                  <input type="text" placeholder="Filtrer l'inbox (nom, société, email)..." value={inboxState.search} onChange={(e) => inboxState.setSearch(e.target.value)} className="bg-transparent outline-none w-full text-xs font-bold" />
+                </div>
 
-                    <div className="relative">
-                        <input 
-                          type="text" 
-                          placeholder="Resp..." 
-                          value={inboxFilters.responsable}
-                          onChange={(e) => setInboxFilters({...inboxFilters, responsable: e.target.value})}
-                          className="w-24 py-2 px-3 pl-7 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg text-[10px] font-bold outline-none"
-                        />
-                        <User size={10} className="absolute left-2 top-2.5 text-slate-400"/>
-                    </div>
+                {/* [NEW] BARRE DE FILTRES AVANCÉE */}
+                <div className="flex flex-wrap gap-2 items-center">
+                  <select
+                    value={inboxFilters.status}
+                    onChange={(e) => setInboxFilters({ ...inboxFilters, status: e.target.value })}
+                    className="bg-white dark:bg-slate-900 border dark:border-slate-700 text-[10px] font-black uppercase py-2 px-3 rounded-lg outline-none cursor-pointer"
+                  >
+                    <option value="all">Tous Status</option>
+                    <option value="pas_commence">⚪ À Traiter</option>
+                    <option value="en_cours">🔵 En cours</option>
+                    <option value="termine">🟢 Terminé</option>
+                  </select>
 
-                    <button 
-                      onClick={() => setInboxFilters({...inboxFilters, onlyOverdue: !inboxFilters.onlyOverdue})}
-                      className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase border transition-colors flex items-center gap-1 ${inboxFilters.onlyOverdue ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'}`}
-                    >
-                      <AlertTriangle size={12} /> Retards J+7
-                    </button>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Resp..."
+                      value={inboxFilters.responsable}
+                      onChange={(e) => setInboxFilters({ ...inboxFilters, responsable: e.target.value })}
+                      className="w-24 py-2 px-3 pl-7 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg text-[10px] font-bold outline-none"
+                    />
+                    <User size={10} className="absolute left-2 top-2.5 text-slate-400" />
+                  </div>
 
-                     {/* Tri Date */}
-                     <button 
-                      onClick={() => setInboxFilters({...inboxFilters, sortOrder: inboxFilters.sortOrder === 'date_desc' ? 'date_asc' : 'date_desc'})}
-                      className="px-3 py-2 rounded-lg text-[10px] font-black uppercase border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 flex items-center gap-1"
-                    >
-                      <ArrowDownUp size={12} /> {inboxFilters.sortOrder === 'date_desc' ? 'Récent' : 'Ancien'}
-                    </button>
-                 </div>
+                  <button
+                    onClick={() => setInboxFilters({ ...inboxFilters, onlyOverdue: !inboxFilters.onlyOverdue })}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase border transition-colors flex items-center gap-1 ${inboxFilters.onlyOverdue ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'}`}
+                  >
+                    <AlertTriangle size={12} /> Retards J+7
+                  </button>
+
+                  {/* Tri Date */}
+                  <button
+                    onClick={() => setInboxFilters({ ...inboxFilters, sortOrder: inboxFilters.sortOrder === 'date_desc' ? 'date_asc' : 'date_desc' })}
+                    className="px-3 py-2 rounded-lg text-[10px] font-black uppercase border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 flex items-center gap-1"
+                  >
+                    <ArrowDownUp size={12} /> {inboxFilters.sortOrder === 'date_desc' ? 'Récent' : 'Ancien'}
+                  </button>
+                </div>
               </div>
 
               {/* [NEW] LISTE DES MESSAGES MISE À JOUR */}
               <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pb-24">
                 {filteredInbox.map((item) => {
-                   const isCritical = isOverdueAlert(item.dateRelance);
-                   
-                   return (
-                    <div 
-                      key={item.id} 
+                  const isCritical = isOverdueAlert(item.dateRelance);
+
+                  return (
+                    <div
+                      key={item.id}
                       onClick={() => setEditingInboxItem(item)}
                       className={`cursor-pointer group relative p-4 rounded-2xl border flex justify-between items-start bg-white dark:bg-slate-800 transition-all hover:shadow-md 
                         ${isCritical ? 'border-red-300 bg-red-50/30 dark:bg-red-900/10' : 'border-slate-100 dark:border-slate-700'}
@@ -743,43 +886,42 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     >
                       <div className="flex gap-4 w-full">
                         {/* Indicateur visuel Statut */}
-                        <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${
-                          item.statut === 'termine' ? 'bg-emerald-500' : 
+                        <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${item.statut === 'termine' ? 'bg-emerald-500' :
                           item.statut === 'en_cours' ? 'bg-blue-500' : 'bg-slate-200'
-                        }`} />
+                          }`} />
 
                         <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-400 h-fit">
-                           {item.source === 'email' ? <Mail size={18} /> : item.source === 'phone' ? <Phone size={18} /> : <Globe size={18} />}
+                          {item.source === 'email' ? <Mail size={18} /> : item.source === 'phone' ? <Phone size={18} /> : <Globe size={18} />}
                         </div>
-                        
+
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
-                             <div>
-                                <h4 className="font-bold text-sm truncate">{item.contactName}</h4>
-                                <p className="text-xs text-slate-500 font-medium truncate">{item.companyName || 'Particulier'}</p>
-                             </div>
-                             {/* Badges */}
-                             <div className="flex flex-col items-end gap-1">
-                                {item.devisEnvoye && <span className="bg-emerald-100 text-emerald-700 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Devis OK</span>}
-                                {isCritical && <span className="bg-red-100 text-red-600 text-[8px] px-1.5 py-0.5 rounded font-black uppercase flex items-center gap-1 animate-pulse"><AlertTriangle size={8}/> Relance</span>}
-                             </div>
+                            <div>
+                              <h4 className="font-bold text-sm truncate">{item.contactName}</h4>
+                              <p className="text-xs text-slate-500 font-medium truncate">{item.companyName || 'Particulier'}</p>
+                            </div>
+                            {/* Badges */}
+                            <div className="flex flex-col items-end gap-1">
+                              {item.devisEnvoye && <span className="bg-emerald-100 text-emerald-700 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Devis OK</span>}
+                              {isCritical && <span className="bg-red-100 text-red-600 text-[8px] px-1.5 py-0.5 rounded font-black uppercase flex items-center gap-1 animate-pulse"><AlertTriangle size={8} /> Relance</span>}
+                            </div>
                           </div>
 
                           {/* Infos Responsable & Date */}
                           <div className="flex items-center gap-3 mt-2">
-                             <p className="text-[10px] text-slate-400 font-bold uppercase">Reçu: {new Date(item.requestDate).toLocaleDateString()}</p>
-                             {item.responsable && (
-                                <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">
-                                  <User size={8} /> {item.responsable}
-                                </span>
-                             )}
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Reçu: {new Date(item.requestDate).toLocaleDateString()}</p>
+                            {item.responsable && (
+                              <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">
+                                <User size={8} /> {item.responsable}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
 
                       {/* Actions Rapides au Survol + Bouton Archiver Rapide */}
                       <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onClick={(e) => { e.stopPropagation(); handleArchiveRequest(item.id); }} className="p-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-red-100 hover:text-red-500 transition-colors" title="Archiver"><Archive size={12}/></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleArchiveRequest(item.id); }} className="p-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-red-100 hover:text-red-500 transition-colors" title="Archiver"><Archive size={12} /></button>
                       </div>
                     </div>
                   );
@@ -795,19 +937,19 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
             <div className="flex gap-4 mb-4">
               {/* Barre de recherche contacts */}
               <div className="flex-1 flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border border-transparent focus-within:border-indigo-500 transition-all">
-                 <Search size={18} className="text-slate-400 mr-3" />
-                 <input 
-                   type="text" 
-                   placeholder="Rechercher un contact..." 
-                   value={contactSearch}
-                   onChange={(e) => setContactSearch(e.target.value)}
-                   className="bg-transparent outline-none w-full text-sm font-bold text-slate-700 dark:text-white"
-                 />
+                <Search size={18} className="text-slate-400 mr-3" />
+                <input
+                  type="text"
+                  placeholder="Rechercher un contact..."
+                  value={contactSearch}
+                  onChange={(e) => setContactSearch(e.target.value)}
+                  className="bg-transparent outline-none w-full text-sm font-bold text-slate-700 dark:text-white"
+                />
               </div>
-              
+
               {/* ✅ NOUVEAU BOUTON EXPORT CONTACTS */}
-              <button 
-                onClick={handleExportContactsCSV} 
+              <button
+                onClick={handleExportContactsCSV}
                 className="px-6 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:opacity-90 transition-opacity"
               >
                 <Download size={16} /> Exporter
@@ -816,58 +958,58 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredGridContacts.map((contact: any) => (
-                <div 
-                  key={contact.id} 
+                <div
+                  key={contact.id}
                   onClick={() => setViewingContact(contact)}
                   className={`p-4 rounded-2xl border flex items-center gap-4 transition-all hover:shadow-md cursor-pointer ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-100 shadow-sm hover:bg-slate-50'}`}
                 >
-                   {/* Avatar/Initials */}
-                   <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${contact.color || 'bg-slate-200 text-slate-500'}`}>
-                      {contact.initials || contact.name.slice(0, 2).toUpperCase()}
-                   </div>
-                   
-                   {/* Info */}
-                   <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-sm truncate">{contact.name}</h4>
-                      <p className="text-xs text-slate-400 truncate font-medium uppercase tracking-wide">{contact.company || contact.companyName || 'Particulier'}</p>
-                      
-                      {/* Action buttons */}
-                      <div className="flex gap-2 mt-2">
-                          {contact.phone && (
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); openSMS(contact.phone, ''); }} 
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 transition-colors"
-                              title="SMS"
-                            >
-                              <Briefcase size={14}/>
-                            </button>
-                          )}
-                          {contact.phone && (
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); openWhatsApp(contact.phone, ''); }} 
-                              className="p-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 transition-colors"
-                              title="WhatsApp"
-                            >
-                              <Phone size={14}/>
-                            </button>
-                          )}
-                          {contact.email && (
-                            <a 
-                              href={`mailto:${contact.email}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="p-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 transition-colors"
-                              title="Email"
-                            >
-                              <Mail size={14}/>
-                            </a>
-                          )}
-                      </div>
-                   </div>
+                  {/* Avatar/Initials */}
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${contact.color || 'bg-slate-200 text-slate-500'}`}>
+                    {contact.initials || contact.name.slice(0, 2).toUpperCase()}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-sm truncate">{contact.name}</h4>
+                    <p className="text-xs text-slate-400 truncate font-medium uppercase tracking-wide">{contact.company || contact.companyName || 'Particulier'}</p>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 mt-2">
+                      {contact.phone && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openSMS(contact.phone, ''); }}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 transition-colors"
+                          title="SMS"
+                        >
+                          <Briefcase size={14} />
+                        </button>
+                      )}
+                      {contact.phone && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openWhatsApp(contact.phone, ''); }}
+                          className="p-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 transition-colors"
+                          title="WhatsApp"
+                        >
+                          <Phone size={14} />
+                        </button>
+                      )}
+                      {contact.email && (
+                        <a
+                          href={`mailto:${contact.email}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 transition-colors"
+                          title="Email"
+                        >
+                          <Mail size={14} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))}
               {filteredGridContacts.length === 0 && (
                 <div className="col-span-full text-center py-10 opacity-50">
-                  <Users size={48} className="mx-auto mb-2 text-slate-300"/>
+                  <Users size={48} className="mx-auto mb-2 text-slate-300" />
                   <p className="text-sm font-bold text-slate-400">Aucun contact trouvé.</p>
                 </div>
               )}
@@ -877,114 +1019,114 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
             {viewingContact && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
                 <div className={`w-full max-w-lg rounded-[32px] p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto no-scrollbar ${userSettings.darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
-                   <button 
-                     onClick={() => setViewingContact(null)} 
-                     className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"
-                   >
-                     <X size={20}/>
-                   </button>
+                  <button
+                    onClick={() => setViewingContact(null)}
+                    className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
 
-                   <div className="flex flex-col items-center mb-6">
-                      <div className={`w-20 h-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-md mb-3 ${viewingContact.color || 'bg-slate-200 text-slate-500'}`}>
-                        {viewingContact.initials || viewingContact.name.slice(0, 2).toUpperCase()}
-                      </div>
-                      <h3 className="text-xl font-black">{viewingContact.name}</h3>
-                      <p className="text-sm text-slate-400 font-bold uppercase">{viewingContact.company || viewingContact.companyName || 'Particulier'}</p>
-                   </div>
+                  <div className="flex flex-col items-center mb-6">
+                    <div className={`w-20 h-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-md mb-3 ${viewingContact.color || 'bg-slate-200 text-slate-500'}`}>
+                      {viewingContact.initials || viewingContact.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <h3 className="text-xl font-black">{viewingContact.name}</h3>
+                    <p className="text-sm text-slate-400 font-bold uppercase">{viewingContact.company || viewingContact.companyName || 'Particulier'}</p>
+                  </div>
 
-                   {/* Stats */}
-                   <div className="grid grid-cols-2 gap-4 mb-6">
-                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
-                         <span className="text-2xl font-black text-indigo-600 block">{getContactHistory(viewingContact).total}</span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Totaux</span>
-                      </div>
-                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
-                         <span className="text-2xl font-black text-emerald-500 block">{getContactHistory(viewingContact).validated}</span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Validés</span>
-                      </div>
-                   </div>
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
+                      <span className="text-2xl font-black text-indigo-600 block">{getContactHistory(viewingContact).total}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Totaux</span>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
+                      <span className="text-2xl font-black text-emerald-500 block">{getContactHistory(viewingContact).validated}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Validés</span>
+                    </div>
+                  </div>
 
-                   {/* Infos */}
-                   <div className="space-y-3 mb-6">
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                         <Phone size={18} className="text-slate-400"/>
-                         <span className="font-bold text-sm">{viewingContact.phone || '-'}</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                         <Mail size={18} className="text-slate-400"/>
-                         <span className="font-bold text-sm">{viewingContact.email || '-'}</span>
-                      </div>
-                   </div>
+                  {/* Infos */}
+                  <div className="space-y-3 mb-6">
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                      <Phone size={18} className="text-slate-400" />
+                      <span className="font-bold text-sm">{viewingContact.phone || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                      <Mail size={18} className="text-slate-400" />
+                      <span className="font-bold text-sm">{viewingContact.email || '-'}</span>
+                    </div>
+                  </div>
 
-                   {/* Historique */}
-                   <h4 className="font-black text-sm uppercase text-slate-400 mb-3 ml-1">Historique Récent</h4>
-                   <div className="space-y-2">
-                      {getContactHistory(viewingContact).history.length > 0 ? (
-                        getContactHistory(viewingContact).history.map((lead: Lead) => (
-                          <div key={lead.id} className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                             <div>
-                                <p className="font-bold text-xs">{lead.groupName}</p>
-                                <p className="text-[10px] text-slate-400">{new Date(lead.requestDate).toLocaleDateString()}</p>
-                             </div>
-                             <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${lead.status === 'valide' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                                {lead.status}
-                             </span>
+                  {/* Historique */}
+                  <h4 className="font-black text-sm uppercase text-slate-400 mb-3 ml-1">Historique Récent</h4>
+                  <div className="space-y-2">
+                    {getContactHistory(viewingContact).history.length > 0 ? (
+                      getContactHistory(viewingContact).history.map((lead: Lead) => (
+                        <div key={lead.id} className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                          <div>
+                            <p className="font-bold text-xs">{lead.groupName}</p>
+                            <p className="text-[10px] text-slate-400">{new Date(lead.requestDate).toLocaleDateString()}</p>
                           </div>
-                        ))
-                      ) : (
-                        <p className="text-center text-xs text-slate-400 italic py-4">Aucun historique de dossier.</p>
-                      )}
-                   </div>
+                          <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${lead.status === 'valide' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {lead.status}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center text-xs text-slate-400 italic py-4">Aucun historique de dossier.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
           </div>
         )}
-        
+
         {activeTab === 'archives' && (
           <div className="w-full h-full flex flex-col p-6">
-             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-black">Historique & Archives</h3>
-                <button onClick={handleExportCSV} className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700">
-                  <Download size={16} /> Exporter Excel
-                </button>
-             </div>
-             
-             {/* LISTE DES DOSSIERS ARCHIVÉS */}
-             <div className="flex-1 rounded-[32px] border bg-white dark:bg-slate-800 p-4 overflow-auto no-scrollbar">
-                {archivedLeads.length > 0 ? (
-                  <div className="space-y-3">
-                    {archivedLeads.map(lead => (
-                      <div key={lead.id} className="p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 flex justify-between items-center opacity-75 hover:opacity-100 transition-opacity">
-                          <div>
-                             <h4 className="font-bold text-sm">{lead.groupName}</h4>
-                             <p className="text-xs text-slate-500">{lead.contactName} • {new Date(lead.requestDate).toLocaleDateString()}</p>
-                          </div>
-                          <div className="flex gap-2">
-                             <button 
-                               onClick={() => handleRestoreLead(lead)} 
-                               className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-xs font-bold uppercase flex items-center gap-1 hover:bg-blue-200"
-                             >
-                               <RotateCcw size={14}/> Restaurer
-                             </button>
-                             <button 
-                               onClick={() => handleDeleteDefinitely(lead.id)} 
-                               className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                               title="Supprimer définitivement"
-                             >
-                               <Trash2 size={16}/>
-                             </button>
-                          </div>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black">Historique & Archives</h3>
+              <button onClick={handleExportCSV} className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700">
+                <Download size={16} /> Exporter Excel
+              </button>
+            </div>
+
+            {/* LISTE DES DOSSIERS ARCHIVÉS */}
+            <div className="flex-1 rounded-[32px] border bg-white dark:bg-slate-800 p-4 overflow-auto no-scrollbar">
+              {archivedLeads.length > 0 ? (
+                <div className="space-y-3">
+                  {archivedLeads.map(lead => (
+                    <div key={lead.id} className="p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 flex justify-between items-center opacity-75 hover:opacity-100 transition-opacity">
+                      <div>
+                        <h4 className="font-bold text-sm">{lead.groupName}</h4>
+                        <p className="text-xs text-slate-500">{lead.contactName} • {new Date(lead.requestDate).toLocaleDateString()}</p>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center opacity-30">
-                    <FolderOpen size={48} className="mb-4 text-slate-400"/>
-                    <p className="text-center text-slate-400 font-bold">Aucun dossier archivé.</p>
-                  </div>
-                )}
-             </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleRestoreLead(lead)}
+                          className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-xs font-bold uppercase flex items-center gap-1 hover:bg-blue-200"
+                        >
+                          <RotateCcw size={14} /> Restaurer
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDefinitely(lead.id)}
+                          className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Supprimer définitivement"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center opacity-30">
+                  <FolderOpen size={48} className="mb-4 text-slate-400" />
+                  <p className="text-center text-slate-400 font-bold">Aucun dossier archivé.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -993,13 +1135,13 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
           <div className="w-full max-w-2xl mx-auto overflow-y-auto no-scrollbar py-6">
             <div className={`p-8 rounded-[40px] border shadow-sm space-y-6 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
               <h3 className="text-2xl font-black uppercase tracking-tight">Qualifier une demande</h3>
-              
+
               {/* BOUTONS SMS / WHATSAPP */}
               <div className="space-y-4">
                 {/* SÉLECTEUR DE CONTACT */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
-                  <select 
+                  <select
                     className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-sm"
                     value={selectedVipId}
                     onChange={(e) => {
@@ -1070,6 +1212,69 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                   </button>
                 </div>
 
+                {/* ✅ BLOC TRANSMISSION ÉQUIPE (Visuel Distinct) */}
+                <div className="p-5 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-100 dark:border-indigo-900/50 mb-6 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-2 opacity-10">
+                    <Send size={64} className="text-indigo-500" />
+                  </div>
+
+                  <h4 className="text-sm font-black uppercase text-indigo-800 dark:text-indigo-200 mb-3 flex items-center gap-2 relative z-10">
+                    📣 Transmettre le lead à l'équipe
+                  </h4>
+
+                  <div className="flex flex-col gap-3 relative z-10">
+                    <select
+                      className="w-full p-3 rounded-xl bg-white dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-xs"
+                      value={selectedTeamMemberId}
+                      onChange={(e) => setSelectedTeamMemberId(e.target.value)}
+                    >
+                      <option value="">-- Choisir un membre --</option>
+                      {users.map(u => (
+                        <option key={u.uid} value={u.uid}>{u.displayName || u.email} ({u.role})</option>
+                      ))}
+                    </select>
+
+                    {selectedTeamMemberId && (
+                      <div className="grid grid-cols-3 gap-2 animate-in slide-in-from-top-2 fade-in">
+                        <button
+                          onClick={() => {
+                            const u = users.find(x => x.uid === selectedTeamMemberId);
+                            if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
+                            const msg = `Salut ${u.displayName}, nouveau lead à traiter :\nClient: ${form.contactName}\nDate: ${form.startDate}\nNote: ${form.note || 'Aucune'}`;
+                            openWhatsApp(u.phone, msg);
+                          }}
+                          className="py-2 rounded-xl bg-emerald-500 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-emerald-600 transition-colors"
+                        >
+                          <Phone size={16} /> WhatsApp
+                        </button>
+                        <button
+                          onClick={() => {
+                            const u = users.find(x => x.uid === selectedTeamMemberId);
+                            if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
+                            const msg = `Salut ${u.displayName}, nouveau lead à traiter :\nClient: ${form.contactName}\nDate: ${form.startDate}\nNote: ${form.note || 'Aucune'}`;
+                            openSMS(u.phone, msg);
+                          }}
+                          className="py-2 rounded-xl bg-slate-700 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-slate-800 transition-colors"
+                        >
+                          <Briefcase size={16} /> SMS
+                        </button>
+                        <button
+                          onClick={() => {
+                            const u = users.find(x => x.uid === selectedTeamMemberId);
+                            if (!u?.email) return alert("Pas d'email renseigné pour ce membre.");
+                            const subject = `Nouveau Lead : ${form.groupName}`;
+                            const body = `Salut ${u.displayName},\n\nNouveau lead à traiter :\n\nClient : ${form.contactName}\nGroupe : ${form.groupName}\nDate : ${form.startDate}\n\nNote : ${form.note || ''}`;
+                            window.open(`mailto:${u.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+                          }}
+                          className="py-2 rounded-xl bg-blue-500 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-blue-600 transition-colors"
+                        >
+                          <Mail size={16} /> Email
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nom du Groupe *</label>
                   <input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" placeholder="Ex: Mariage Durand" value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })} />
@@ -1100,11 +1305,11 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
 
       </div>
 
-      <InboxDetailPanel 
-        isOpen={!!editingInboxItem} 
-        item={editingInboxItem} 
-        onClose={() => setEditingInboxItem(null)} 
-        onSave={handleSaveInboxItem} 
+      <InboxDetailPanel
+        isOpen={!!editingInboxItem}
+        item={editingInboxItem}
+        onClose={() => setEditingInboxItem(null)}
+        onSave={handleSaveInboxItem}
         onValidate={handleValidateRequest}
       />
 

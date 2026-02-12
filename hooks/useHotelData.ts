@@ -37,6 +37,7 @@ import {
   Recipe,
   RatioItem,
   ChatChannel,
+  SpaInventoryItem
 } from "../types";
 
 // ✅ IMPORT DU HOOK COMPLEMENTAIRE
@@ -112,6 +113,7 @@ export const useHotelData = (user: any) => {
   const [laundryIssues, setLaundryIssues] = useState<any[]>([]);
   const [ratioItems, setRatioItems] = useState<RatioItem[]>([]);
   const [ratioCategories, setRatioCategories] = useState<string[]>([]);
+  const [spaInventory, setSpaInventory] = useState<SpaInventoryItem[]>([]);
 
   // --- FIREBASE SUBSCRIPTIONS ---
   useEffect(() => {
@@ -190,6 +192,12 @@ export const useHotelData = (user: any) => {
     unsubs.push(
       subscribeToSharedCollection(DB_COLLECTIONS.SPA, (data) =>
         setSpaRequests(data as SpaRequest[])
+      )
+    );
+
+    unsubs.push(
+      subscribeToSharedCollection(DB_COLLECTIONS.SPA_INVENTORY, (data) =>
+        setSpaInventory(data as SpaInventoryItem[])
       )
     );
 
@@ -278,6 +286,8 @@ export const useHotelData = (user: any) => {
     setRatioItems,
     ratioCategories,
     setRatioCategories,
+    spaInventory,
+    setSpaInventory,
     allUsers,
   };
 };

@@ -1,13 +1,13 @@
 import { db } from '../firebase';
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  onSnapshot, 
-  query, 
-  where, 
-  Unsubscribe 
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  where,
+  Unsubscribe
 } from "firebase/firestore";
 
 /**
@@ -28,13 +28,14 @@ const COLLECTIONS = {
   RECEPTION: 'reception', // Contient logs, taxis, wakeups, lost_found
   SPA: 'spa',
   MESSAGES_GLOBAL: 'messages_global',
-  
+
   // ESPACES PRIVÉS
   TASKS: 'user_tasks',
   AGENDA: 'user_agenda',
   CONTACTS: 'user_contacts',
   DASHBOARD: 'user_dashboard',
-  MESSAGES_PRIVATE: 'messages_private'
+  MESSAGES_PRIVATE: 'messages_private',
+  SPA_INVENTORY: 'spa_inventory'
 };
 
 // --- FONCTIONS D'ÉCRITURE GÉNÉRIQUES ---
@@ -74,11 +75,11 @@ export const deleteDocument = async (collectionName: string, id: string | number
  * Écoute une collection PARTAGÉE (Tout le staff voit tout)
  */
 export const subscribeToSharedCollection = (
-  collectionName: string, 
+  collectionName: string,
   callback: (data: any[]) => void
 ): Unsubscribe => {
   const q = query(collection(db, collectionName));
-  
+
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     callback(items);
@@ -91,14 +92,14 @@ export const subscribeToSharedCollection = (
  * Écoute une collection PRIVÉE (Filtrée par ownerId)
  */
 export const subscribeToUserCollection = (
-  collectionName: string, 
+  collectionName: string,
   userId: string,
   callback: (data: any[]) => void
 ): Unsubscribe => {
-  if (!userId) return () => {};
+  if (!userId) return () => { };
 
   const q = query(collection(db, collectionName), where("ownerId", "==", userId));
-  
+
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     callback(items);
@@ -147,7 +148,12 @@ export const syncClients = async (clients: any[]) => {
   // On met les clients dans 'groupes' ou une sous-collection, ou 'reception'.
   // Pour l'instant, utilisons 'reception' (catégorie fourre-tout pour clients) ou créons 'crm_clients'.
   // Consigne A: 'groupes' est le plus proche pour le CRM
-  clients.forEach(c => saveDocument(COLLECTIONS.GROUPS, { ...c, type_doc: 'client' })); 
+  clients.forEach(c => saveDocument(COLLECTIONS.GROUPS, { ...c, type_doc: 'client' }));
+};
+
+// 6. SPA INVENTORY
+export const syncSpaInventory = async (items: any[]) => {
+  items.forEach(i => saveDocument(COLLECTIONS.SPA_INVENTORY, i));
 };
 
 // Export constants for App.tsx usage
