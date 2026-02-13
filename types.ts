@@ -16,7 +16,8 @@ export type DashboardWidgetId =
   | 'fnb_calculator'
   | 'shift_log'
   | 'room_status'
-  | 'team_chat';
+  | 'team_chat'
+  | 'spa_staffing';
 
 export type DashboardWidgetSize = 'sm' | 'md' | 'lg';
 
@@ -68,6 +69,17 @@ export interface CalendarEvent {
   linkedContactId?: string | number;
   videoLink?: string;
   ownerId?: string;
+  // Extended props for View
+  source?: string;
+  startObj?: Date;
+  endObj?: Date;
+  displayTime?: string;
+  color?: string;
+  textColor?: string;
+  borderColor?: string;
+  lightBg?: string;
+  icon?: any;
+  original?: any;
 }
 
 // =======================
@@ -200,6 +212,7 @@ export interface Lead {
   checklist: LeadChecklist;
   ownerId?: string;
   rooms: Rooms; // ✅ Ajouté pour la synchronisation
+  venues?: string[]; // ✅ Liste des IDs ou Noms des salles
 }
 
 export type InboxSource = 'email' | 'phone' | 'website';
@@ -370,6 +383,8 @@ export interface SpaRequest {
   refusalReason?: SpaRefusalReason; // Si refusé
   source?: string;
   createdAt: string;
+  isDuo?: boolean;
+  duration: number; // Durée en minutes
 }
 
 export type SpaInventoryCategory = 'Huiles & Crèmes' | 'Linge' | 'Consommables' | 'Entretien';

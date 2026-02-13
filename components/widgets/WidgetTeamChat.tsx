@@ -1,49 +1,45 @@
 import React, { useState } from 'react';
 import { MessageSquare, Users, Settings, ChefHat, Wrench, Send } from 'lucide-react';
-
-interface ChatMessage {
-    id: string;
-    sender: string;
-    text: string;
-    time: string;
-    isMe?: boolean;
-}
-
-const CHANNELS = [
-    { id: 'general', label: 'Général', icon: Users, color: 'text-indigo-500' },
-    { id: 'reception', label: 'Réception', icon: MessageSquare, color: 'text-blue-500' },
-    { id: 'kitchen', label: 'Cuisine', icon: ChefHat, color: 'text-emerald-500' },
-    { id: 'maintenance', label: 'Maint.', icon: Wrench, color: 'text-orange-500' },
-];
-
-const MOCK_MESSAGES: Record<string, ChatMessage[]> = {
-    general: [
-        { id: '1', sender: 'Directeur', text: 'Réunion d\'équipe à 14h en salle B.', time: '09:00' },
-        { id: '2', sender: 'RH', text: 'N\'oubliez pas de valider vos congés.', time: '10:30' },
-        { id: '3', sender: 'Sophie', text: 'Ok, noté !', time: '10:35', isMe: true },
-    ],
-    reception: [
-        { id: '1', sender: 'Sarah', text: 'Le VIP de la 402 demande un late check-out.', time: '11:10' },
-        { id: '2', sender: 'Thomas', text: 'Accordé jusqu\'à 14h.', time: '11:12' },
-    ],
-    kitchen: [
-        { id: '1', sender: 'Chef', text: 'Rupture de stock sur le Saumon.', time: '12:00' },
-        { id: '2', sender: 'Patrice', text: 'Livraison prévue demain matin.', time: '12:05' },
-        { id: '3', sender: 'Chef', text: 'Ok on part sur le Bar pour ce soir.', time: '12:10' },
-    ],
-    maintenance: [
-        { id: '1', sender: 'Bob', text: 'Ascenseur B en panne.', time: '08:45' },
-        { id: '2', sender: 'Tech', text: 'Je suis dessus.', time: '09:00' },
-    ]
-};
+import { ChatChannel, ChatMessage } from '../../types';
 
 interface WidgetTeamChatProps {
     darkMode: boolean;
+    channels: ChatChannel[];
+    onSendMessage?: (channelId: string, message: ChatMessage) => void;
 }
 
-const WidgetTeamChat: React.FC<WidgetTeamChatProps> = ({ darkMode }) => {
-    const [activeChannel, setActiveChannel] = useState('general');
-    const messages = MOCK_MESSAGES[activeChannel] || [];
+const WidgetTeamChat: React.FC<WidgetTeamChatProps> = ({ darkMode, channels, onSendMessage }) => {
+    // We try to find default channels by name or ID if they exist, otherwise use the first available
+    const [activeChannelId, setActiveChannelId] = useState<string>(channels[0]?.id || 'general');
+    const [inputText, setInputText] = useState('');
+
+    const activeChannel = channels.find(c => c.id === activeChannelId) || channels[0];
+    const messages = activeChannel?.messages || [];
+
+    const handleSend = () => {
+        if (!inputText.trim() || !onSendMessage || !activeChannel) return;
+
+        const newMessage: ChatMessage = {
+            id: `msg-${Date.now()}`,
+            senderId: 'me',
+            senderName: 'Moi',
+            text: inputText,
+            timestamp: new Date().toISOString(),
+            reactions: []
+        };
+
+        onSendMessage(activeChannel.id, newMessage);
+        setInputText('');
+    };
+
+    const getChannelIcon = (name: string) => {
+        const n = name.toLowerCase();
+        if (n.includes('général') || n.includes('general')) return { icon: Users, color: 'text-indigo-500' };
+        if (n.includes('réception') || n.includes('reception')) return { icon: MessageSquare, color: 'text-blue-500' };
+        if (n.includes('cuisine') || n.includes('kitchen')) return { icon: ChefHat, color: 'text-emerald-500' };
+        if (n.includes('maint') || n.includes('technique')) return { icon: Wrench, color: 'text-orange-500' };
+        return { icon: MessageSquare, color: 'text-slate-500' };
+    };
 
     return (
         <section className="flex flex-col h-full">
@@ -59,40 +55,52 @@ const WidgetTeamChat: React.FC<WidgetTeamChatProps> = ({ darkMode }) => {
 
                 {/* Channel Tabs */}
                 <div className={`flex border-b overflow-x-auto no-scrollbar ${darkMode ? 'border-slate-700' : 'border-slate-100'}`}>
-                    {CHANNELS.map(channel => (
-                        <button
-                            key={channel.id}
-                            onClick={() => setActiveChannel(channel.id)}
-                            className={`flex-1 flex flex-col items-center justify-center py-3 px-2 min-w-[60px] cursor-pointer transition-colors relative ${activeChannel === channel.id
+                    {channels.map(channel => {
+                        const { icon: Icon, color } = getChannelIcon(channel.name);
+                        return (
+                            <button
+                                key={channel.id}
+                                onClick={() => setActiveChannelId(channel.id)}
+                                className={`flex-1 flex flex-col items-center justify-center py-3 px-2 min-w-[60px] cursor-pointer transition-colors relative ${activeChannelId === channel.id
                                     ? (darkMode ? 'bg-slate-700/50' : 'bg-slate-50')
                                     : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
-                                }`}
-                        >
-                            <channel.icon size={16} className={`mb-1 ${activeChannel === channel.id ? channel.color : 'text-slate-400'}`} />
-                            <span className={`text-[9px] font-bold ${activeChannel === channel.id ? (darkMode ? 'text-white' : 'text-slate-900') : 'text-slate-400'}`}>
-                                {channel.label}
-                            </span>
-                            {activeChannel === channel.id && (
-                                <div className={`absolute bottom-0 left-0 right-0 h-0.5 ${channel.color.replace('text-', 'bg-')}`} />
-                            )}
-                        </button>
-                    ))}
+                                    }`}
+                            >
+                                <Icon size={16} className={`mb-1 ${activeChannelId === channel.id ? color : 'text-slate-400'}`} />
+                                <span className={`text-[9px] font-bold truncate max-w-full px-1 ${activeChannelId === channel.id ? (darkMode ? 'text-white' : 'text-slate-900') : 'text-slate-400'}`}>
+                                    {channel.name}
+                                </span>
+                                {activeChannelId === channel.id && (
+                                    <div className={`absolute bottom-0 left-0 right-0 h-0.5 ${color.replace('text-', 'bg-')}`} />
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Messages Area */}
                 <div className="flex-1 p-4 space-y-3 overflow-y-auto no-scrollbar bg-slate-50/50 dark:bg-slate-900/50">
-                    {messages.map((msg) => (
-                        <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                            <div className={`max-w-[85%] p-3 rounded-2xl text-xs font-medium relative ${msg.isMe
+                    {messages.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
+                            <MessageSquare size={24} className="opacity-20" />
+                            <p className="text-[10px] font-bold">Aucun message</p>
+                        </div>
+                    ) : (
+                        messages.map((msg) => (
+                            <div key={msg.id} className={`flex flex-col ${msg.senderId === 'me' ? 'items-end' : 'items-start'}`}>
+                                <div className={`max-w-[85%] p-3 rounded-2xl text-xs font-medium relative ${msg.senderId === 'me'
                                     ? 'bg-indigo-600 text-white rounded-br-none'
                                     : (darkMode ? 'bg-slate-700 text-slate-200 rounded-bl-none' : 'bg-white text-slate-700 shadow-sm rounded-bl-none')
-                                }`}>
-                                {!msg.isMe && <p className="text-[9px] font-black opacity-50 mb-1">{msg.sender}</p>}
-                                {msg.text}
+                                    }`}>
+                                    {msg.senderId !== 'me' && <p className="text-[9px] font-black opacity-50 mb-1">{msg.senderName}</p>}
+                                    {msg.text}
+                                </div>
+                                <span className="text-[9px] text-slate-400 mt-1 px-1">
+                                    {new Date(msg.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
                             </div>
-                            <span className="text-[9px] text-slate-400 mt-1 px-1">{msg.time}</span>
-                        </div>
-                    ))}
+                        ))
+                    )}
                 </div>
 
                 {/* Mock Input */}
@@ -100,10 +108,16 @@ const WidgetTeamChat: React.FC<WidgetTeamChatProps> = ({ darkMode }) => {
                     <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${darkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
                         <input
                             type="text"
-                            placeholder={`Message #${activeChannel}...`}
+                            value={inputText}
+                            onChange={(e) => setInputText(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                            placeholder={`Message #${activeChannel?.name || '...'}`}
                             className="bg-transparent border-none focus:outline-none text-xs w-full font-medium"
                         />
-                        <button className="text-indigo-500 hover:text-indigo-600">
+                        <button
+                            onClick={handleSend}
+                            className="text-indigo-500 hover:text-indigo-600 transition-transform active:scale-95"
+                        >
                             <Send size={14} />
                         </button>
                     </div>

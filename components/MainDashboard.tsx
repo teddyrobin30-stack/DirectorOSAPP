@@ -26,6 +26,8 @@ import type {
   Group,
   Lead,
   InboxItem,
+  ChatChannel,
+  ChatMessage,
   DashboardWidgetConfig,
   SpaRequest,
   DashboardWidgetId
@@ -37,6 +39,7 @@ import WidgetFnbCalculator from './widgets/WidgetFnbCalculator';
 import WidgetShiftLog from './widgets/WidgetShiftLog';
 import WidgetRoomStatus from './widgets/WidgetRoomStatus';
 import WidgetTeamChat from './widgets/WidgetTeamChat';
+import WidgetSpaStaffing from './widgets/WidgetSpaStaffing';
 
 interface MainDashboardProps {
   userSettings: UserSettings;
@@ -48,6 +51,7 @@ interface MainDashboardProps {
   leads?: Lead[];
   inbox?: InboxItem[];
   spaRequests?: SpaRequest[];
+  channels?: ChatChannel[];
 
   onNavigate: (tab: string) => void;
   onTaskToggle: (id: string | number) => void;
@@ -57,6 +61,7 @@ interface MainDashboardProps {
   onOpenEventModal: () => void;
   onOpenTaskModal: () => void;
   onOpenContactModal: () => void;
+  onSendMessage?: (channelId: string, message: ChatMessage) => void;
 
   onSaveDashboardWidgets?: (widgets: DashboardWidgetConfig[]) => void;
 }
@@ -73,6 +78,7 @@ const BASE_WIDGETS: DashboardWidgetConfig[] = [
   { id: 'shift_log', enabled: true, order: 60, size: 'md' },
   { id: 'room_status', enabled: true, order: 80, size: 'md' },
   { id: 'team_chat', enabled: true, order: 90, size: 'lg' },
+  { id: 'spa_staffing', enabled: false, order: 65, size: 'md' },
 ];
 
 const getRoleBasedDefaults = (base: DashboardWidgetConfig[], role?: string): DashboardWidgetConfig[] => {
@@ -83,6 +89,7 @@ const getRoleBasedDefaults = (base: DashboardWidgetConfig[], role?: string): Das
     // SPA : On active le widget SPA et on le remonte
     defaults = defaults.map(w => {
       if (w.id === 'spa_requests') return { ...w, enabled: true, order: 15 };
+      if (w.id === 'spa_staffing') return { ...w, enabled: true, order: 16 };
       return w;
     });
   } else if (role === 'fnb') {
@@ -153,6 +160,7 @@ const titleByWidget: Record<string, string> = {
   shift_log: 'Main Courante',
   room_status: 'État Chambres',
   team_chat: 'Messagerie Équipe',
+  spa_staffing: 'Prévisions Staff Spa',
 };
 
 const descByWidget: Record<string, string> = {
@@ -166,6 +174,7 @@ const descByWidget: Record<string, string> = {
   shift_log: 'Flux des événements récents',
   room_status: 'Synthèse ménage et technique',
   team_chat: 'Communication instantanée',
+  spa_staffing: 'Besoins en personnel pour aujourd\'hui',
 };
 
 const sizeLabel: Record<NonNullable<DashboardWidgetConfig['size']>, string> = {
@@ -184,6 +193,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   leads = [],
   inbox = [],
   spaRequests = [],
+  channels = [],
   onNavigate,
   onTaskToggle,
   onTaskClick,
@@ -192,6 +202,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
   onOpenEventModal,
   onOpenTaskModal,
   onOpenContactModal,
+  onSendMessage,
   onSaveDashboardWidgets,
 }) => {
   const today = useMemo(() => new Date(), []);
@@ -591,7 +602,8 @@ const MainDashboard: React.FC<MainDashboardProps> = ({
       case 'fnb_calculator': return <WidgetFnbCalculator darkMode={userSettings.darkMode} />;
       case 'shift_log': return <WidgetShiftLog darkMode={userSettings.darkMode} />;
       case 'room_status': return <WidgetRoomStatus darkMode={userSettings.darkMode} />;
-      case 'team_chat': return <WidgetTeamChat darkMode={userSettings.darkMode} />;
+      case 'team_chat': return <WidgetTeamChat darkMode={userSettings.darkMode} channels={channels} onSendMessage={onSendMessage} />;
+      case 'spa_staffing': return <WidgetSpaStaffing requests={spaRequests} darkMode={userSettings.darkMode} />;
       default: return null;
     }
   };

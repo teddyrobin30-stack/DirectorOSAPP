@@ -7,6 +7,9 @@ import {
 import { SpaRequest, UserSettings, SpaRefusalReason, SpaStatus, SpaSource, SpaInventoryItem } from '../types';
 import SpaInventory from './SpaInventory';
 import SpaRatioCalculator from './SpaRatioCalculator';
+import SpaBookingModal from './SpaBookingModal';
+import SpaCalendarView from './SpaCalendarView';
+import SpaStaffingForecast from './SpaStaffingForecast';
 
 interface SpaViewProps {
   userSettings: UserSettings;
@@ -17,8 +20,10 @@ interface SpaViewProps {
 }
 
 const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateRequests, spaInventory, onUpdateInventory }) => {
-  const [activeTab, setActiveTab] = useState<'reservations' | 'inventory' | 'calculator'>('reservations');
-  const [showNewModal, setShowNewModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'reservations' | 'planning' | 'staffing' | 'inventory' | 'calculator'>('reservations');
+  const [forecastDate, setForecastDate] = useState(new Date().toISOString().split('T')[0]);
+  const [editingRequest, setEditingRequest] = useState<SpaRequest | null>(null);
+  const [showNewModal, setShowNewModal] = useState(false); // We can still use this for 'creating' state if we want, or just check editingRequest
   const [showRefusalModal, setShowRefusalModal] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
 
@@ -30,18 +35,6 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'pending' | 'confirmed' | 'today' | 'archived'>('pending');
   const [sortOrder, setSortOrder] = useState<'date_asc' | 'created_desc' | 'status'>('date_asc');
-
-  // New Request Form
-  const [newRequest, setNewRequest] = useState({
-    clientName: '',
-    phone: '',
-    email: '',
-    date: new Date().toISOString().split('T')[0],
-    time: '10:00',
-    treatment: '',
-    source: 'Direct' as string
-  });
-  const [customSource, setCustomSource] = useState('');
 
   // Refusal Form
   const [refusalReason, setRefusalReason] = useState<SpaRefusalReason>('complet_cabine');
@@ -87,55 +80,73 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
     setSelectedRequestId(null);
   };
 
-  const handleSaveNew = () => {
-    if (!newRequest.clientName || !newRequest.date || !newRequest.time) return;
+  const handleSaveRequest = (updatedRequest: Partial<SpaRequest>) => {
+    let finalRequests = [...requests];
+    const isNew = !updatedRequest.id || !requests.find(r => r.id === updatedRequest.id);
 
-    // Use custom source if "Saisie Manuelle" is selected
-    const finalSource = newRequest.source === 'Saisie Manuelle' ? customSource : newRequest.source;
+    if (isNew) {
+      const newReq: SpaRequest = {
+        id: `spa-${Date.now()}`,
+        clientName: updatedRequest.clientName || '',
+        phone: updatedRequest.phone || '',
+        email: updatedRequest.email || '',
+        date: updatedRequest.date || new Date().toISOString().split('T')[0],
+        time: updatedRequest.time || '10:00',
+        treatment: updatedRequest.treatment || '',
+        source: updatedRequest.source || 'Direct',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        isDuo: updatedRequest.isDuo || false,
+        duration: updatedRequest.duration || 60
+      };
+      finalRequests = [newReq, ...requests];
 
-    const request: SpaRequest = {
-      id: `spa-${Date.now()}`,
-      ...newRequest,
-      source: finalSource,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-
-    onUpdateRequests([request, ...requests]);
-    setShowNewModal(false);
-    setNewRequest({
-      clientName: '', phone: '', email: '',
-      date: new Date().toISOString().split('T')[0], time: '10:00', treatment: '', source: 'Direct'
-    });
-    setCustomSource('');
-
-    // --- NATIVE NOTIFICATION ---
-    try {
-      const savedSettings = localStorage.getItem('hotelos_notifications');
-      if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
-        if (settings.pushEnabled && settings.newBooking && Notification.permission === 'granted') {
-          const title = "💆 Nouveau Soin Réservé";
-          const options = {
-            body: `Client : ${newRequest.clientName} - ${newRequest.time}`,
-            icon: "/pwa-192x192.svg",
-            badge: "/pwa-192x192.svg",
-            vibrate: [200, 100, 200],
-            silent: false
-          };
-
-          if ('serviceWorker' in navigator && 'PushManager' in window) {
-            navigator.serviceWorker.ready.then(registration => {
-              registration.showNotification(title, options as any);
-            });
-          } else {
-            new Notification(title, options);
+      // --- NATIVE NOTIFICATION (Only for new) ---
+      try {
+        const savedSettings = localStorage.getItem('hotelos_notifications');
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          if (settings.pushEnabled && settings.newBooking && Notification.permission === 'granted') {
+            const title = "💆 Nouveau Soin Réservé";
+            const options = {
+              body: `Client : ${newReq.clientName} - ${newReq.time}`,
+              icon: "/pwa-192x192.svg",
+              badge: "/pwa-192x192.svg",
+              vibrate: [200, 100, 200],
+              silent: false
+            };
+            if ('serviceWorker' in navigator && 'PushManager' in window) {
+              navigator.serviceWorker.ready.then(registration => {
+                registration.showNotification(title, options as any);
+              });
+            } else {
+              new Notification(title, options);
+            }
           }
         }
+      } catch (e) {
+        console.error("Erreur Notification:", e);
       }
-    } catch (e) {
-      console.error("Erreur Notification:", e);
+    } else {
+      // Mapping for Edit
+      finalRequests = requests.map(r => r.id === updatedRequest.id ? { ...r, ...updatedRequest } as SpaRequest : r);
     }
+
+    onUpdateRequests(finalRequests);
+    setEditingRequest(null);
+    setShowNewModal(false);
+  };
+
+  const handleDeleteRequest = (id: string) => {
+    if (window.confirm("Supprimer cette réservation ?")) {
+      onUpdateRequests(requests.filter(r => r.id !== id));
+      setEditingRequest(null);
+    }
+  };
+
+  const handleUpdateSpaDate = (id: string | number, date: string, time: string) => {
+    const updated = requests.map(r => String(r.id) === String(id) ? { ...r, date, time } : r);
+    onUpdateRequests(updated);
   };
 
   // --- FILTERING LOGIC ---
@@ -192,10 +203,12 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
 
       {/* TABS */}
       <div className={`px-6 py-4 flex flex-col md:flex-row gap-4 justify-between items-center border-b ${userSettings.darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-        <div className="flex p-1 rounded-2xl bg-slate-200 dark:bg-slate-800 w-fit">
-          <button onClick={() => setActiveTab('reservations')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'reservations' ? 'bg-white dark:bg-slate-700 shadow text-violet-600' : 'text-slate-500'}`}>📅 Réservations</button>
-          <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'inventory' ? 'bg-white dark:bg-slate-700 shadow text-violet-600' : 'text-slate-500'}`}>📦 Inventaire</button>
-          <button onClick={() => setActiveTab('calculator')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'calculator' ? 'bg-white dark:bg-slate-700 shadow text-violet-600' : 'text-slate-500'}`}>➗ Calculateur</button>
+        <div className="flex p-1 rounded-2xl bg-slate-200 dark:bg-slate-800 w-full md:w-fit overflow-x-auto no-scrollbar">
+          <button onClick={() => setActiveTab('reservations')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeTab === 'reservations' ? 'bg-white dark:bg-slate-700 shadow text-violet-600' : 'text-slate-500'}`}>📅 Réservations</button>
+          <button onClick={() => setActiveTab('planning')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeTab === 'planning' ? 'bg-white dark:bg-slate-700 shadow text-violet-600' : 'text-slate-500'}`}>🗓️ Planning</button>
+          <button onClick={() => setActiveTab('staffing')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeTab === 'staffing' ? 'bg-white dark:bg-slate-700 shadow text-violet-600' : 'text-slate-500'}`}>👥 Staffing</button>
+          <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeTab === 'inventory' ? 'bg-white dark:bg-slate-700 shadow text-violet-600' : 'text-slate-500'}`}>📦 Inventaire</button>
+          <button onClick={() => setActiveTab('calculator')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeTab === 'calculator' ? 'bg-white dark:bg-slate-700 shadow text-violet-600' : 'text-slate-500'}`}>➗ Calculateur</button>
         </div>
 
         {activeTab === 'reservations' && (
@@ -223,7 +236,11 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
             <div className="flex-1 overflow-y-auto px-6 pb-20 no-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
                 {processedRequests.map(req => (
-                  <div key={req.id} className={`p-5 rounded-3xl border-2 transition-all hover:shadow-md flex flex-col justify-between ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+                  <div
+                    key={req.id}
+                    onClick={() => setEditingRequest(req)}
+                    className={`p-5 rounded-3xl border-2 transition-all hover:shadow-md cursor-pointer group flex flex-col justify-between ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 hover:border-violet-500/50' : 'bg-white border-slate-100 hover:border-violet-200'}`}
+                  >
                     <div className="space-y-4">
                       <div className="flex justify-between items-start">
                         <div className="flex items-center gap-2">
@@ -233,9 +250,14 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
                             <p className="text-[10px] text-slate-500 font-medium">{req.source || 'Direct'}</p>
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${req.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : req.status === 'refused' ? 'bg-red-100 text-red-700' : 'bg-violet-100 text-violet-700'}`}>
-                          {req.status}
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${req.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : req.status === 'refused' ? 'bg-red-100 text-red-700' : 'bg-violet-100 text-violet-700'}`}>
+                            {req.status}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-[4px] text-[8px] font-bold uppercase ${req.isDuo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                            {req.isDuo ? 'Duo' : 'Seul'}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -248,7 +270,7 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
                       </div>
                     </div>
 
-                    <div className="flex gap-2 mt-6 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <div className="flex gap-2 mt-6 pt-4 border-t border-slate-100 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
                       {req.status === 'pending' && (
                         <>
                           <button onClick={() => handleDeclineClick(req.id)} className="flex-1 py-2 rounded-xl border border-red-200 text-red-600 font-bold text-xs uppercase flex items-center justify-center gap-2 hover:bg-red-50"><XCircle size={14} /> Refuser</button>
@@ -264,6 +286,36 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
           </div>
         )}
 
+        {activeTab === 'planning' && (
+          <SpaCalendarView
+            spaRequests={requests}
+            userSettings={userSettings}
+            onUpdateRequest={handleUpdateSpaDate}
+            onSpaClick={setEditingRequest}
+          />
+        )}
+
+        {activeTab === 'staffing' && (
+          <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
+            <div className="px-6 py-4 flex justify-between items-center border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <h2 className="text-sm font-black uppercase text-slate-400">Période d'analyse</h2>
+              <input
+                type="date"
+                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 font-bold text-xs outline-none border-2 border-transparent focus:border-violet-500 transition-all"
+                value={forecastDate}
+                onChange={(e) => setForecastDate(e.target.value)}
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto no-scrollbar">
+              <SpaStaffingForecast
+                requests={requests}
+                selectedDate={forecastDate}
+                userSettings={userSettings}
+              />
+            </div>
+          </div>
+        )}
+
         {activeTab === 'inventory' && (
           <SpaInventory userSettings={userSettings} inventory={spaInventory} onUpdateInventory={onUpdateInventory} />
         )}
@@ -273,41 +325,14 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
         )}
       </div>
 
-      {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className={`w-full max-w-md rounded-[32px] p-6 shadow-2xl ${userSettings.darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black">Nouvelle Réservation Spa</h3>
-              <button onClick={() => setShowNewModal(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full"><X size={20} /></button>
-            </div>
-            <div className="space-y-4">
-              <input type="text" placeholder="Nom Client" className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-sm outline-none" value={newRequest.clientName} onChange={(e) => setNewRequest({ ...newRequest, clientName: e.target.value })} />
-              <div className="grid grid-cols-2 gap-3">
-                <input type="tel" placeholder="Téléphone" className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-sm outline-none" value={newRequest.phone} onChange={(e) => setNewRequest({ ...newRequest, phone: e.target.value })} />
-                <select className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-sm outline-none cursor-pointer" value={newRequest.source} onChange={(e) => setNewRequest({ ...newRequest, source: e.target.value })}>
-                  {['Direct', 'Extérieur', 'Weekendesk', 'Thalasseo', 'Sport Découverte', 'Thalasso n°1', 'Saisie Manuelle'].map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              {newRequest.source === 'Saisie Manuelle' && (
-                <input
-                  type="text"
-                  placeholder="Précisez la source (ex: Recommandation Chef)"
-                  className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-sm outline-none border border-violet-200 focus:border-violet-500 transition-colors animate-in slide-in-from-top-2"
-                  value={customSource}
-                  onChange={(e) => setCustomSource(e.target.value)}
-                  autoFocus
-                />
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <input type="date" className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-sm outline-none" value={newRequest.date} onChange={(e) => setNewRequest({ ...newRequest, date: e.target.value })} />
-                <input type="time" className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-sm outline-none" value={newRequest.time} onChange={(e) => setNewRequest({ ...newRequest, time: e.target.value })} />
-              </div>
-              <textarea placeholder="Soin souhaité" className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 font-medium text-sm outline-none h-24 resize-none" value={newRequest.treatment} onChange={(e) => setNewRequest({ ...newRequest, treatment: e.target.value })} />
-              <button onClick={handleSaveNew} className="w-full py-4 rounded-2xl bg-violet-600 text-white font-black uppercase text-xs tracking-widest shadow-lg mt-2">Enregistrer</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SpaBookingModal
+        isOpen={showNewModal || !!editingRequest}
+        onClose={() => { setShowNewModal(false); setEditingRequest(null); }}
+        onSave={handleSaveRequest}
+        onDelete={handleDeleteRequest}
+        userSettings={userSettings}
+        initialData={editingRequest}
+      />
 
       {showRescheduleModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">

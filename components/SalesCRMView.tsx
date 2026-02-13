@@ -5,13 +5,13 @@ import {
   Clock, CheckCircle2, XCircle, Search, Inbox, Users, Globe,
   Archive, Download, ArrowDownUp, Check, X,
   LayoutList, CalendarDays, ChevronLeft, ChevronRight, Trash2,
-  PieChart, RotateCcw, FolderOpen, Send
+  PieChart, RotateCcw, FolderOpen, Send, BedDouble, Settings
 } from 'lucide-react';
 
 // TYPES
 import {
   Lead, UserSettings, UserProfile, LeadStatus,
-  InboxItem, Client, InboxSource, Contact, Rooms,
+  InboxItem, Client, InboxSource, Contact, Rooms, Venue,
   ExtendedInboxItem, InboxStatus // [NEW] Import des types étendus
 } from '../types';
 
@@ -102,6 +102,55 @@ const RoomsInputs: React.FC<{ value: Rooms; onChange: (next: Rooms) => void; com
   );
 };
 
+const VenuesInputs: React.FC<{
+  availableVenues: Venue[];
+  selectedVenues: string[];
+  onChange: (next: string[]) => void;
+  onOpenConfig?: () => void;
+}> = ({ availableVenues, selectedVenues, onChange, onOpenConfig }) => {
+  const toggle = (vName: string) => {
+    if (selectedVenues.includes(vName)) {
+      onChange(selectedVenues.filter(x => x !== vName));
+    } else {
+      onChange([...selectedVenues, vName]);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-center px-1">
+        <label className="text-[10px] font-black uppercase text-slate-400">Salles & Espaces</label>
+        {onOpenConfig && (
+          <button
+            onClick={onOpenConfig}
+            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-indigo-500 hover:bg-slate-200 transition-all flex items-center gap-1.5 px-2"
+          >
+            <Settings size={10} />
+            <span className="text-[8px] font-black uppercase">Modifier</span>
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {availableVenues.map(v => {
+          const isSelected = selectedVenues.includes(v.name);
+          return (
+            <button
+              key={v.id}
+              onClick={() => toggle(v.name)}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all ${isSelected
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                }`}
+            >
+              {v.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 /* -------------------- MAIN COMPONENT -------------------- */
 interface SalesCRMViewProps {
   userSettings: UserSettings;
@@ -115,6 +164,9 @@ interface SalesCRMViewProps {
   onUpdateContacts?: (contacts: Contact[]) => void;
   users: UserProfile[];
   onNavigate: (tab: string) => void;
+  initialLeadId?: string | number | null;
+  venues: Venue[];
+  onOpenConfig?: () => void;
 }
 
 const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
@@ -129,7 +181,10 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
     clients = [],
     onUpdateClients,
     users,
-    onNavigate
+    onNavigate,
+    initialLeadId,
+    venues = [],
+    onOpenConfig
   } = props;
 
   // HOOKS
@@ -141,6 +196,20 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
   // UI STATE
   const [activeTab, setActiveTab] = useState<'pipeline' | 'inbox' | 'contacts' | 'new_lead' | 'archives'>('pipeline');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+
+  // Auto-select initial lead if provided
+  React.useEffect(() => {
+    if (initialLeadId) {
+      const lead = leads.find(l => String(l.id) === String(initialLeadId));
+      if (lead) {
+        setSelectedLead(lead);
+        setActiveTab('pipeline');
+        setPipelineViewMode('list');
+      }
+    } else if (!selectedLead && leads.length > 0) {
+      setSelectedLead(leads[0]);
+    }
+  }, [initialLeadId, leads]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pipelineViewMode, setPipelineViewMode] = useState<'list' | 'calendar'>('list');
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -225,7 +294,9 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
       const isVipA = (a as any).vip ? 1 : 0;
       const isVipB = (b as any).vip ? 1 : 0;
       if (isVipA !== isVipB) return isVipB - isVipA;
-      return a.name.localeCompare(b.name);
+      const nameA = a.name || "";
+      const nameB = b.name || "";
+      return nameA.localeCompare(nameB);
     });
     return arr;
   }, [appContacts]);
@@ -384,9 +455,16 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
             <p className="text-xs font-bold text-slate-400">Leads & Demandes Groupes</p>
           </div>
         </div>
-        <button onClick={() => onNavigate('dashboard')} className="px-4 py-2 rounded-xl border-2 font-black text-xs uppercase flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-          <ArrowLeft size={14} /> Retour
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenConfig && (
+            <button onClick={onOpenConfig} className="px-4 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-2 border-indigo-100 dark:border-indigo-900/50 font-black text-xs uppercase flex items-center gap-2 hover:bg-indigo-100 transition-colors">
+              <Settings size={14} /> Réglages
+            </button>
+          )}
+          <button onClick={() => onNavigate('dashboard')} className="px-4 py-2 rounded-xl border-2 font-black text-xs uppercase flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <ArrowLeft size={14} /> Retour
+          </button>
+        </div>
       </div>
 
       {/* TABS - STYLE STABLE & TACTILE */}
@@ -493,7 +571,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                       <button onClick={() => setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"><ChevronRight size={16} /></button>
                     </div>
                     <div className="grid grid-cols-7 border-b text-[10px] font-black text-slate-400 text-center py-2">
-                      {['L', 'Ma', 'Me', 'J', 'V', 'S', 'D'].map(d => <div key={d}>{d}</div>)}
+                      {['L', 'Ma', 'Me', 'J', 'V', 'S', 'D'].map((d, idx) => <div key={`${d}-${idx}`}>{d}</div>)}
                     </div>
                     <div className="flex-1 grid grid-cols-7 auto-rows-fr overflow-y-auto">
                       {calendarData.map((date, i) => {
@@ -535,42 +613,61 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                       <option value="perdu">Perdu</option>
                     </select>
                   </div>
-
                   <div className="grid grid-cols-2 gap-4 mb-8">
-                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl">
-                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Email</p>
-                      <p className="text-sm font-bold">{selectedLead.email || '-'}</p>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1 flex items-center gap-1"><Mail size={10} /> Email</p>
+                      <p className="text-sm font-bold truncate">{selectedLead.email || '-'}</p>
                     </div>
-                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl">
-                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Téléphone</p>
-                      <p className="text-sm font-bold">{selectedLead.phone || '-'}</p>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1 flex items-center gap-1"><Phone size={10} /> Téléphone</p>
+                      <p className="text-sm font-bold truncate">{selectedLead.phone || '-'}</p>
+                    </div>
+                  </div>
+
+                  {/* AJOUT : HEBERGEMENT & SALLES */}
+                  <div className="space-y-6 mb-8">
+                    <div className="p-6 rounded-[32px] border-2 border-slate-50 dark:border-slate-800 bg-white shadow-sm dark:bg-slate-900/30">
+                      <h4 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest flex items-center gap-2">
+                        <BedDouble size={14} className="text-indigo-400" /> Hébergement (Détail)
+                      </h4>
+                      <RoomsInputs
+                        value={selectedLead.rooms || defaultRooms()}
+                        onChange={(next) => handleUpdateLead({ ...selectedLead, rooms: next })}
+                        compact
+                      />
+                    </div>
+
+                    <div className="p-6 rounded-[32px] border-2 border-indigo-50 dark:border-indigo-900/10 bg-indigo-50/10 dark:bg-indigo-900/5">
+                      <h4 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest flex items-center gap-2">
+                        <Globe size={14} className="text-emerald-400" /> Salles & Espaces
+                      </h4>
+                      <VenuesInputs
+                        availableVenues={venues}
+                        selectedVenues={selectedLead.venues || []}
+                        onChange={(next) => handleUpdateLead({ ...selectedLead, venues: next })}
+                        onOpenConfig={onOpenConfig}
+                      />
                     </div>
                   </div>
 
                   {/* ✅ TRANSMISSION DU LEAD */}
-                  <div className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 mb-8">
-                    <h4 className="text-[10px] font-black uppercase text-slate-400 mb-3 flex items-center gap-2">
+                  <div className="p-5 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 mb-8">
+                    <h4 className="text-[10px] font-black uppercase text-slate-400 mb-4 flex items-center gap-2">
                       <Send size={12} /> Transmettre l'info à...
                     </h4>
-                    <div className="flex gap-3">
+                    <div className="flex flex-col gap-3">
                       <select
-                        className="flex-1 p-2 rounded-xl bg-white dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 outline-none text-xs font-bold"
+                        className="w-full p-3 rounded-xl bg-white dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 outline-none text-xs font-bold shadow-sm"
                         onChange={(e) => {
                           const u = users.find(u => u.uid === e.target.value);
                           if (u && u.phone) {
-                            // Pré-selection ou action directe ? 
-                            // Ici on stocke juste l'ID ou on déclenche ? 
-                            // Pour simplifier, on pourrait juste avoir des boutons qui utilisent le numéro du user séléctionné.
-                            // Mais l'UI demandée est "Une fois choisi... affiche les 3 boutons".
-                            // On va utiliser un state local pour ce selecteur s'il n'existe pas.
-                            // Pour l'instant, faisons simple : Select + Boutons actifs si selection.
-                            const btn = document.getElementById('transmit-actions');
-                            if (btn) btn.style.display = 'flex';
-                            // On stocke l'user target dans un data attribute du container pour les boutons
                             const container = document.getElementById('transmit-container');
-                            if (container) container.dataset.targetPhone = u.phone;
-                            if (container) container.dataset.targetName = u.displayName || u.email;
-                            if (container) container.dataset.targetEmail = u.email;
+                            if (container) {
+                              container.style.display = 'grid';
+                              container.dataset.targetPhone = u.phone;
+                              container.dataset.targetName = u.displayName || u.email;
+                              container.dataset.targetEmail = u.email;
+                            }
                           }
                         }}
                       >
@@ -579,53 +676,43 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                           <option key={u.uid} value={u.uid}>{u.displayName || u.email} ({u.role})</option>
                         ))}
                       </select>
-                    </div>
 
-                    {/* Actions cachées par défaut, affichées via JS simple ou state si on refactorait tout le composant */}
-                    <div id="transmit-container" className="mt-3 grid grid-cols-3 gap-2">
-                      <button
-                        onClick={(e) => {
-                          const container = document.getElementById('transmit-container');
-                          const phone = container?.dataset.targetPhone;
-                          const name = container?.dataset.targetName;
-                          if (!phone) return alert("Ce membre n'a pas de numéro renseigné.");
-
-                          const msg = `Salut ${name}, peux-tu regarder ce lead ?\nClient: ${selectedLead.contactName}\nDate: ${selectedLead.requestDate}\nNote: ${selectedLead.note || 'Aucune'}`;
-                          openWhatsApp(phone, msg);
-                        }}
-                        className="py-2.5 rounded-xl bg-emerald-100 text-emerald-700 hover:bg-emerald-200 text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-colors"
-                      >
-                        <Phone size={14} /> WhatsApp
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          const container = document.getElementById('transmit-container');
-                          const phone = container?.dataset.targetPhone;
-                          const name = container?.dataset.targetName;
-                          if (!phone) return alert("Ce membre n'a pas de numéro renseigné.");
-
-                          const msg = `Salut ${name}, peux-tu regarder ce lead ?\nClient: ${selectedLead.contactName}\nDate: ${selectedLead.requestDate}\nNote: ${selectedLead.note || 'Aucune'}`;
-                          openSMS(phone, msg);
-                        }}
-                        className="py-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-colors"
-                      >
-                        <Briefcase size={14} /> SMS
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          const container = document.getElementById('transmit-container');
-                          const email = container?.dataset.targetEmail;
-                          const name = container?.dataset.targetName;
-                          if (!email) return alert("Ce membre n'a pas d'email renseigné.");
-
-                          const subject = `Transfert Lead : ${selectedLead.groupName}`;
-                          const body = `Salut ${name},\n\nPeux-tu regarder ce lead ?\n\nClient : ${selectedLead.contactName}\nGroupe : ${selectedLead.groupName}\nDate demande : ${new Date(selectedLead.requestDate).toLocaleDateString()}\n\nNote : ${selectedLead.note || ''}\n\nMerci.`;
-                          window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
-                        }}
-                        className="py-2.5 rounded-xl bg-blue-100 text-blue-700 hover:bg-blue-200 text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-colors"
-                      >
-                        <Mail size={14} /> Email
-                      </button>
+                      <div id="transmit-container" className="hidden grid-cols-3 gap-2 animate-in slide-in-from-top-2">
+                        <button
+                          onClick={() => {
+                            const container = document.getElementById('transmit-container');
+                            const phone = container?.dataset.targetPhone;
+                            if (phone) openWhatsApp(phone, buildMessage({ ...selectedLead }));
+                          }}
+                          className="py-2 rounded-xl bg-emerald-500 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-emerald-600 transition-colors"
+                        >
+                          <Phone size={14} /> WhatsApp
+                        </button>
+                        <button
+                          onClick={() => {
+                            const container = document.getElementById('transmit-container');
+                            const phone = container?.dataset.targetPhone;
+                            if (phone) openSMS(phone, buildMessage({ ...selectedLead }));
+                          }}
+                          className="py-2 rounded-xl bg-slate-700 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-slate-800 transition-colors"
+                        >
+                          <Briefcase size={14} /> SMS
+                        </button>
+                        <button
+                          onClick={() => {
+                            const container = document.getElementById('transmit-container');
+                            const email = container?.dataset.targetEmail;
+                            if (email) {
+                              const subject = `Lead : ${selectedLead.groupName}`;
+                              const body = buildMessage({ ...selectedLead });
+                              window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+                            }
+                          }}
+                          className="py-2 rounded-xl bg-blue-500 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-blue-600 transition-colors"
+                        >
+                          <Mail size={14} /> Email
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -641,13 +728,13 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
                     </div>
                   </div>
 
-                  <textarea className="flex-1 w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl outline-none text-sm font-medium resize-none min-h-[100px]" value={selectedLead.note} onChange={(e) => handleUpdateLead({ ...selectedLead, note: e.target.value })} placeholder="Notes internes et historique..." />
+                  <textarea className="flex-1 w-full p-6 bg-slate-50 dark:bg-slate-900 rounded-[24px] border-2 border-transparent focus:border-indigo-200 outline-none text-sm font-medium resize-none min-h-[150px] transition-all" value={selectedLead.note} onChange={(e) => handleUpdateLead({ ...selectedLead, note: e.target.value })} placeholder="Notes internes et historique..." />
 
                   {/* BOUTON ARCHIVER */}
-                  <div className="pt-6 flex justify-end">
+                  <div className="pt-8 flex justify-end">
                     <button
                       onClick={() => handleArchiveLead(selectedLead)}
-                      className="text-orange-400 hover:text-orange-600 text-xs font-black uppercase flex items-center gap-2"
+                      className="text-orange-400 hover:text-orange-600 transition-colors text-[10px] font-black uppercase flex items-center gap-2 bg-orange-50 dark:bg-orange-950/30 px-4 py-2 rounded-full"
                     >
                       <Archive size={14} /> Archiver le dossier
                     </button>
@@ -664,646 +751,660 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         )}
 
         {/* --- VUE INBOX --- */}
-        {activeTab === 'inbox' && (
-          <div className="flex flex-col md:flex-row h-full gap-6 w-full">
-            <div className={`w-full md:w-1/3 p-6 rounded-[32px] border overflow-y-auto ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
-              <h3 className="text-lg font-black uppercase mb-4">Saisie Rapide</h3>
-              <div className="space-y-4">
+        {
+          activeTab === 'inbox' && (
+            <div className="flex flex-col md:flex-row h-full gap-6 w-full">
+              <div className={`w-full md:w-1/3 p-6 rounded-[32px] border overflow-y-auto ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
+                <h3 className="text-lg font-black uppercase mb-4">Saisie Rapide</h3>
+                <div className="space-y-4">
 
-                {/* ✅ SÉLECTEUR DE CONTACT DANS L'INBOX */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
-                  <select
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none"
-                    value={selectedInboxVipId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedInboxVipId(id);
-                      const c = appContacts.find((x: any) => String(x.id) === id);
-                      if (c) {
-                        setInboxForm({
-                          ...inboxForm,
-                          contactName: c.name,
-                          companyName: c.company || c.companyName || '',
-                          email: c.email || '',
-                          phone: c.phone || ''
-                        });
-                      }
-                    }}
-                  >
-                    <option value="">— Sélectionner —</option>
-                    {vipCandidates.map((c: any) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.company ? `• ${c.company}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  {/* ✅ SÉLECTEUR DE CONTACT DANS L'INBOX */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
+                    <select
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold outline-none"
+                      value={selectedInboxVipId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setSelectedInboxVipId(id);
+                        const c = appContacts.find((x: any) => String(x.id) === id);
+                        if (c) {
+                          setInboxForm({
+                            ...inboxForm,
+                            contactName: c.name,
+                            companyName: c.company || c.companyName || '',
+                            email: c.email || '',
+                            phone: c.phone || ''
+                          });
+                        }
+                      }}
+                    >
+                      <option value="">— Sélectionner —</option>
+                      {vipCandidates.map((c: any) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} {c.company ? `• ${c.company}` : ''}
+                        </option>
+                      ))}
+                    </select>
 
-                  {/* ✅ BOUTONS SMS/WHATSAPP DANS L'INBOX */}
+                    {/* ✅ BOUTONS SMS/WHATSAPP DANS L'INBOX */}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
+                          const msg = buildMessage({
+                            groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
+                            contactName: inboxForm.contactName,
+                            email: inboxForm.email,
+                            phone: targetPhone,
+                            startDate: inboxForm.eventStartDate,
+                            endDate: inboxForm.eventEndDate,
+                            rooms: inboxForm.rooms,
+                            note: inboxForm.note,
+                            sourceLabel: 'Inbox'
+                          });
+                          openSMS(targetPhone, msg);
+                        }}
+                        className="flex-1 py-2 rounded-lg border text-[10px] font-black uppercase hover:bg-slate-100 transition-colors"
+                      >
+                        SMS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
+                          const msg = buildMessage({
+                            groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
+                            contactName: inboxForm.contactName,
+                            email: inboxForm.email,
+                            phone: targetPhone,
+                            startDate: inboxForm.eventStartDate,
+                            endDate: inboxForm.eventEndDate,
+                            rooms: inboxForm.rooms,
+                            note: inboxForm.note,
+                            sourceLabel: 'Inbox'
+                          });
+                          openWhatsApp(targetPhone, msg);
+                        }}
+                        className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase hover:bg-emerald-700 transition-colors"
+                      >
+                        WhatsApp
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ✅ BLOC TRANSMISSION ÉQUIPE INBOX (Même style) */}
+                  <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-100 dark:border-indigo-900/50 relative overflow-hidden">
+                    <h4 className="text-[10px] font-black uppercase text-indigo-800 dark:text-indigo-200 mb-2 flex items-center gap-2">
+                      📣 Transmettre à l'équipe
+                    </h4>
+
+                    <div className="flex flex-col gap-2">
+                      <select
+                        className="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-[10px]"
+                        value={selectedInboxTeamMemberId}
+                        onChange={(e) => setSelectedInboxTeamMemberId(e.target.value)}
+                      >
+                        <option value="">-- Choisir un membre --</option>
+                        {users.map(u => (
+                          <option key={u.uid} value={u.uid}>{u.displayName || u.email} ({u.role})</option>
+                        ))}
+                      </select>
+
+                      {selectedInboxTeamMemberId && (
+                        <div className="grid grid-cols-3 gap-1 animate-in slide-in-from-top-2 fade-in">
+                          <button
+                            onClick={() => {
+                              const u = users.find(x => x.uid === selectedInboxTeamMemberId);
+                              if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
+                              const msg = `Salut ${u.displayName}, nouveau lead (Quick Entry) :\nClient: ${inboxForm.contactName}\nDate: ${inboxForm.eventStartDate}\nNote: ${inboxForm.note || 'Aucune'}`;
+                              openWhatsApp(u.phone, msg);
+                            }}
+                            className="py-1.5 rounded-lg bg-emerald-500 text-white font-black text-[9px] uppercase flex flex-col items-center gap-0.5 shadow-sm hover:bg-emerald-600 transition-colors"
+                          >
+                            <Phone size={12} /> WhatsApp
+                          </button>
+                          <button
+                            onClick={() => {
+                              const u = users.find(x => x.uid === selectedInboxTeamMemberId);
+                              if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
+                              const msg = `Salut ${u.displayName}, nouveau lead (Quick Entry) :\nClient: ${inboxForm.contactName}\nDate: ${inboxForm.eventStartDate}\nNote: ${inboxForm.note || 'Aucune'}`;
+                              openSMS(u.phone, msg);
+                            }}
+                            className="py-1.5 rounded-lg bg-slate-700 text-white font-black text-[9px] uppercase flex flex-col items-center gap-0.5 shadow-sm hover:bg-slate-800 transition-colors"
+                          >
+                            <Briefcase size={12} /> SMS
+                          </button>
+                          <button
+                            onClick={() => {
+                              const u = users.find(x => x.uid === selectedInboxTeamMemberId);
+                              if (!u?.email) return alert("Pas d'email renseigné pour ce membre.");
+                              const subject = `Nouveau Lead : ${inboxForm.companyName || inboxForm.contactName}`;
+                              const body = `Salut ${u.displayName},\n\nNouveau lead (Quick Entry) :\n\nClient : ${inboxForm.contactName}\nDate : ${inboxForm.eventStartDate}\n\nNote : ${inboxForm.note || ''}`;
+                              window.open(`mailto:${u.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+                            }}
+                            className="py-1.5 rounded-lg bg-blue-500 text-white font-black text-[9px] uppercase flex flex-col items-center gap-0.5 shadow-sm hover:bg-blue-600 transition-colors"
+                          >
+                            <Mail size={12} /> Email
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <input type="text" placeholder="Nom Contact *" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.contactName} onChange={(e) => setInboxForm({ ...inboxForm, contactName: e.target.value })} />
+                  <input type="text" placeholder="Entreprise" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.companyName} onChange={(e) => setInboxForm({ ...inboxForm, companyName: e.target.value })} />
+                  <input type="email" placeholder="Email" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.email} onChange={(e) => setInboxForm({ ...inboxForm, email: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="date" className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold" value={inboxForm.eventStartDate} onChange={(e) => setInboxForm({ ...inboxForm, eventStartDate: e.target.value })} />
+                    <input type="date" className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold" value={inboxForm.eventEndDate} onChange={(e) => setInboxForm({ ...inboxForm, eventEndDate: e.target.value })} />
+                  </div>
+                  <RoomsInputs compact value={inboxForm.rooms} onChange={(next) => setInboxForm({ ...inboxForm, rooms: next })} />
                   <div className="flex gap-2">
+                    {(['email', 'phone', 'website'] as InboxSource[]).map(s => (
+                      <button key={s} onClick={() => setInboxForm({ ...inboxForm, source: s })} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase border ${inboxForm.source === s ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>{s}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => { onUpdateInbox?.([{ ...inboxForm, id: uid('inbox'), status: 'to_process', requestDate: new Date().toISOString() }, ...inbox]); setInboxForm({ contactName: '', companyName: '', email: '', phone: '', source: 'email', rooms: defaultRooms() }); setSelectedInboxVipId(''); }} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 transition-all">Enregistrer Demande</button>
+                </div>
+              </div>
+
+              <div className="flex-1 flex flex-col h-full overflow-hidden">
+                <div className="mb-4 p-4 rounded-[24px] border bg-white dark:bg-slate-800 flex flex-col gap-4">
+                  {/* Barre de recherche Globale */}
+                  <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border w-full">
+                    <Search size={16} className="text-slate-400 mr-2" />
+                    <input type="text" placeholder="Filtrer l'inbox (nom, société, email)..." value={inboxState.search} onChange={(e) => inboxState.setSearch(e.target.value)} className="bg-transparent outline-none w-full text-xs font-bold" />
+                  </div>
+
+                  {/* [NEW] BARRE DE FILTRES AVANCÉE */}
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <select
+                      value={inboxFilters.status}
+                      onChange={(e) => setInboxFilters({ ...inboxFilters, status: e.target.value })}
+                      className="bg-white dark:bg-slate-900 border dark:border-slate-700 text-[10px] font-black uppercase py-2 px-3 rounded-lg outline-none cursor-pointer"
+                    >
+                      <option value="all">Tous Status</option>
+                      <option value="pas_commence">⚪ À Traiter</option>
+                      <option value="en_cours">🔵 En cours</option>
+                      <option value="termine">🟢 Terminé</option>
+                    </select>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Resp..."
+                        value={inboxFilters.responsable}
+                        onChange={(e) => setInboxFilters({ ...inboxFilters, responsable: e.target.value })}
+                        className="w-24 py-2 px-3 pl-7 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg text-[10px] font-bold outline-none"
+                      />
+                      <User size={10} className="absolute left-2 top-2.5 text-slate-400" />
+                    </div>
+
+                    <button
+                      onClick={() => setInboxFilters({ ...inboxFilters, onlyOverdue: !inboxFilters.onlyOverdue })}
+                      className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase border transition-colors flex items-center gap-1 ${inboxFilters.onlyOverdue ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'}`}
+                    >
+                      <AlertTriangle size={12} /> Retards J+7
+                    </button>
+
+                    {/* Tri Date */}
+                    <button
+                      onClick={() => setInboxFilters({ ...inboxFilters, sortOrder: inboxFilters.sortOrder === 'date_desc' ? 'date_asc' : 'date_desc' })}
+                      className="px-3 py-2 rounded-lg text-[10px] font-black uppercase border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 flex items-center gap-1"
+                    >
+                      <ArrowDownUp size={12} /> {inboxFilters.sortOrder === 'date_desc' ? 'Récent' : 'Ancien'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* [NEW] LISTE DES MESSAGES MISE À JOUR */}
+                <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pb-24">
+                  {filteredInbox.map((item) => {
+                    const isCritical = isOverdueAlert(item.dateRelance);
+
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => setEditingInboxItem(item)}
+                        className={`cursor-pointer group relative p-4 rounded-2xl border flex justify-between items-start bg-white dark:bg-slate-800 transition-all hover:shadow-md 
+                        ${isCritical ? 'border-red-300 bg-red-50/30 dark:bg-red-900/10' : 'border-slate-100 dark:border-slate-700'}
+                      `}
+                      >
+                        <div className="flex gap-4 w-full">
+                          {/* Indicateur visuel Statut */}
+                          <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${item.statut === 'termine' ? 'bg-emerald-500' :
+                            item.statut === 'en_cours' ? 'bg-blue-500' : 'bg-slate-200'
+                            }`} />
+
+                          <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-400 h-fit">
+                            {item.source === 'email' ? <Mail size={18} /> : item.source === 'phone' ? <Phone size={18} /> : <Globe size={18} />}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-bold text-sm truncate">{item.contactName}</h4>
+                                <p className="text-xs text-slate-500 font-medium truncate">{item.companyName || 'Particulier'}</p>
+                              </div>
+                              {/* Badges */}
+                              <div className="flex flex-col items-end gap-1">
+                                {item.devisEnvoye && <span className="bg-emerald-100 text-emerald-700 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Devis OK</span>}
+                                {isCritical && <span className="bg-red-100 text-red-600 text-[8px] px-1.5 py-0.5 rounded font-black uppercase flex items-center gap-1 animate-pulse"><AlertTriangle size={8} /> Relance</span>}
+                              </div>
+                            </div>
+
+                            {/* Infos Responsable & Date */}
+                            <div className="flex items-center gap-3 mt-2">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase">Reçu: {new Date(item.requestDate).toLocaleDateString()}</p>
+                              {item.responsable && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">
+                                  <User size={8} /> {item.responsable}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions Rapides au Survol + Bouton Archiver Rapide */}
+                        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={(e) => { e.stopPropagation(); handleArchiveRequest(item.id); }} className="p-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-red-100 hover:text-red-500 transition-colors" title="Archiver"><Archive size={12} /></button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        }
+
+        {/* --- AUTRES VUES --- */}
+        {
+          activeTab === 'contacts' && (
+            <div className="h-full overflow-y-auto p-4 md:px-6 pb-20 no-scrollbar relative">
+              <div className="flex gap-4 mb-4">
+                {/* Barre de recherche contacts */}
+                <div className="flex-1 flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border border-transparent focus-within:border-indigo-500 transition-all">
+                  <Search size={18} className="text-slate-400 mr-3" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher un contact..."
+                    value={contactSearch}
+                    onChange={(e) => setContactSearch(e.target.value)}
+                    className="bg-transparent outline-none w-full text-sm font-bold text-slate-700 dark:text-white"
+                  />
+                </div>
+
+                {/* ✅ NOUVEAU BOUTON EXPORT CONTACTS */}
+                <button
+                  onClick={handleExportContactsCSV}
+                  className="px-6 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:opacity-90 transition-opacity"
+                >
+                  <Download size={16} /> Exporter
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredGridContacts.map((contact: any) => (
+                  <div
+                    key={contact.id}
+                    onClick={() => setViewingContact(contact)}
+                    className={`p-4 rounded-2xl border flex items-center gap-4 transition-all hover:shadow-md cursor-pointer ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-100 shadow-sm hover:bg-slate-50'}`}
+                  >
+                    {/* Avatar/Initials */}
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${contact.color || 'bg-slate-200 text-slate-500'}`}>
+                      {contact.initials || (contact.name ? contact.name.slice(0, 2).toUpperCase() : '??')}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-sm truncate">{contact.name}</h4>
+                      <p className="text-xs text-slate-400 truncate font-medium uppercase tracking-wide">{contact.company || contact.companyName || 'Particulier'}</p>
+
+                      {/* Action buttons */}
+                      <div className="flex gap-2 mt-2">
+                        {contact.phone && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openSMS(contact.phone, ''); }}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 transition-colors"
+                            title="SMS"
+                          >
+                            <Briefcase size={14} />
+                          </button>
+                        )}
+                        {contact.phone && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openWhatsApp(contact.phone, ''); }}
+                            className="p-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 transition-colors"
+                            title="WhatsApp"
+                          >
+                            <Phone size={14} />
+                          </button>
+                        )}
+                        {contact.email && (
+                          <a
+                            href={`mailto:${contact.email}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 transition-colors"
+                            title="Email"
+                          >
+                            <Mail size={14} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {filteredGridContacts.length === 0 && (
+                  <div className="col-span-full text-center py-10 opacity-50">
+                    <Users size={48} className="mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm font-bold text-slate-400">Aucun contact trouvé.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* MODAL DETAIL CONTACT */}
+              {viewingContact && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+                  <div className={`w-full max-w-lg rounded-[32px] p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto no-scrollbar ${userSettings.darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
+                    <button
+                      onClick={() => setViewingContact(null)}
+                      className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"
+                    >
+                      <X size={20} />
+                    </button>
+
+                    <div className="flex flex-col items-center mb-6">
+                      <div className={`w-20 h-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-md mb-3 ${viewingContact.color || 'bg-slate-200 text-slate-500'}`}>
+                        {viewingContact.initials || viewingContact.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <h3 className="text-xl font-black">{viewingContact.name}</h3>
+                      <p className="text-sm text-slate-400 font-bold uppercase">{viewingContact.company || viewingContact.companyName || 'Particulier'}</p>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
+                        <span className="text-2xl font-black text-indigo-600 block">{getContactHistory(viewingContact).total}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Totaux</span>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
+                        <span className="text-2xl font-black text-emerald-500 block">{getContactHistory(viewingContact).validated}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Validés</span>
+                      </div>
+                    </div>
+
+                    {/* Infos */}
+                    <div className="space-y-3 mb-6">
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                        <Phone size={18} className="text-slate-400" />
+                        <span className="font-bold text-sm">{viewingContact.phone || '-'}</span>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                        <Mail size={18} className="text-slate-400" />
+                        <span className="font-bold text-sm">{viewingContact.email || '-'}</span>
+                      </div>
+                    </div>
+
+                    {/* Historique */}
+                    <h4 className="font-black text-sm uppercase text-slate-400 mb-3 ml-1">Historique Récent</h4>
+                    <div className="space-y-2">
+                      {getContactHistory(viewingContact).history.length > 0 ? (
+                        getContactHistory(viewingContact).history.map((lead: Lead) => (
+                          <div key={lead.id} className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                            <div>
+                              <p className="font-bold text-xs">{lead.groupName}</p>
+                              <p className="text-[10px] text-slate-400">{new Date(lead.requestDate).toLocaleDateString()}</p>
+                            </div>
+                            <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${lead.status === 'valide' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                              {lead.status}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-center text-xs text-slate-400 italic py-4">Aucun historique de dossier.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        }
+
+        {
+          activeTab === 'archives' && (
+            <div className="w-full h-full flex flex-col p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black">Historique & Archives</h3>
+                <button onClick={handleExportCSV} className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700">
+                  <Download size={16} /> Exporter Excel
+                </button>
+              </div>
+
+              {/* LISTE DES DOSSIERS ARCHIVÉS */}
+              <div className="flex-1 rounded-[32px] border bg-white dark:bg-slate-800 p-4 overflow-auto no-scrollbar">
+                {archivedLeads.length > 0 ? (
+                  <div className="space-y-3">
+                    {archivedLeads.map(lead => (
+                      <div key={lead.id} className="p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 flex justify-between items-center opacity-75 hover:opacity-100 transition-opacity">
+                        <div>
+                          <h4 className="font-bold text-sm">{lead.groupName}</h4>
+                          <p className="text-xs text-slate-500">{lead.contactName} • {new Date(lead.requestDate).toLocaleDateString()}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleRestoreLead(lead)}
+                            className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-xs font-bold uppercase flex items-center gap-1 hover:bg-blue-200"
+                          >
+                            <RotateCcw size={14} /> Restaurer
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDefinitely(lead.id)}
+                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Supprimer définitivement"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center opacity-30">
+                    <FolderOpen size={48} className="mb-4 text-slate-400" />
+                    <p className="text-center text-slate-400 font-bold">Aucun dossier archivé.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        }
+
+        {/* --- FORMULAIRE NOUVEAU LEAD --- */}
+        {
+          activeTab === 'new_lead' && (
+            <div className="w-full max-w-2xl mx-auto overflow-y-auto no-scrollbar py-6">
+              <div className={`p-8 rounded-[40px] border shadow-sm space-y-6 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+                <h3 className="text-2xl font-black uppercase tracking-tight">Qualifier une demande</h3>
+
+                {/* BOUTONS SMS / WHATSAPP */}
+                <div className="space-y-4">
+                  {/* SÉLECTEUR DE CONTACT */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
+                    <select
+                      className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-sm"
+                      value={selectedVipId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setSelectedVipId(id);
+                        const c = appContacts.find((x: any) => String(x.id) === id);
+                        if (c) {
+                          setForm({
+                            ...form,
+                            contactName: c.name,
+                            email: c.email || '',
+                            phone: c.phone || ''
+                          });
+                        }
+                      }}
+                    >
+                      <option value="">— Sélectionner —</option>
+                      {vipCandidates.map((c: any) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} {c.company ? `• ${c.company}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex gap-2 pb-4">
                     <button
                       type="button"
                       onClick={() => {
-                        const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
-                          groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
-                          contactName: inboxForm.contactName,
-                          email: inboxForm.email,
-                          phone: targetPhone,
-                          startDate: inboxForm.eventStartDate,
-                          endDate: inboxForm.eventEndDate,
-                          rooms: inboxForm.rooms,
-                          note: inboxForm.note,
-                          sourceLabel: 'Inbox'
+                          groupName: form.groupName,
+                          contactName: form.contactName,
+                          email: form.email,
+                          phone: form.phone,
+                          startDate: form.startDate,
+                          endDate: form.endDate,
+                          pax: form.pax,
+                          rooms: form.rooms,
+                          note: form.note,
+                          sourceLabel: 'Nouveau Lead'
                         });
-                        openSMS(targetPhone, msg);
+                        openSMS(form.phone, msg);
                       }}
-                      className="flex-1 py-2 rounded-lg border text-[10px] font-black uppercase hover:bg-slate-100 transition-colors"
+                      className="flex-1 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-black text-xs uppercase hover:bg-slate-100 transition-colors"
                     >
                       SMS
                     </button>
                     <button
                       type="button"
                       onClick={() => {
-                        const targetPhone = selectedInboxContact?.phone || inboxForm.phone;
                         const msg = buildMessage({
-                          groupName: inboxForm.companyName ? `Groupe ${inboxForm.companyName}` : `Event ${inboxForm.contactName}`,
-                          contactName: inboxForm.contactName,
-                          email: inboxForm.email,
-                          phone: targetPhone,
-                          startDate: inboxForm.eventStartDate,
-                          endDate: inboxForm.eventEndDate,
-                          rooms: inboxForm.rooms,
-                          note: inboxForm.note,
-                          sourceLabel: 'Inbox'
+                          groupName: form.groupName,
+                          contactName: form.contactName,
+                          email: form.email,
+                          phone: form.phone,
+                          startDate: form.startDate,
+                          endDate: form.endDate,
+                          pax: form.pax,
+                          rooms: form.rooms,
+                          note: form.note,
+                          sourceLabel: 'Nouveau Lead'
                         });
-                        openWhatsApp(targetPhone, msg);
+                        openWhatsApp(form.phone, msg);
                       }}
-                      className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase hover:bg-emerald-700 transition-colors"
+                      className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-700 transition-colors"
                     >
                       WhatsApp
                     </button>
                   </div>
-                </div>
 
-                {/* ✅ BLOC TRANSMISSION ÉQUIPE INBOX (Même style) */}
-                <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-100 dark:border-indigo-900/50 relative overflow-hidden">
-                  <h4 className="text-[10px] font-black uppercase text-indigo-800 dark:text-indigo-200 mb-2 flex items-center gap-2">
-                    📣 Transmettre à l'équipe
-                  </h4>
-
-                  <div className="flex flex-col gap-2">
-                    <select
-                      className="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-[10px]"
-                      value={selectedInboxTeamMemberId}
-                      onChange={(e) => setSelectedInboxTeamMemberId(e.target.value)}
-                    >
-                      <option value="">-- Choisir un membre --</option>
-                      {users.map(u => (
-                        <option key={u.uid} value={u.uid}>{u.displayName || u.email} ({u.role})</option>
-                      ))}
-                    </select>
-
-                    {selectedInboxTeamMemberId && (
-                      <div className="grid grid-cols-3 gap-1 animate-in slide-in-from-top-2 fade-in">
-                        <button
-                          onClick={() => {
-                            const u = users.find(x => x.uid === selectedInboxTeamMemberId);
-                            if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
-                            const msg = `Salut ${u.displayName}, nouveau lead (Quick Entry) :\nClient: ${inboxForm.contactName}\nDate: ${inboxForm.eventStartDate}\nNote: ${inboxForm.note || 'Aucune'}`;
-                            openWhatsApp(u.phone, msg);
-                          }}
-                          className="py-1.5 rounded-lg bg-emerald-500 text-white font-black text-[9px] uppercase flex flex-col items-center gap-0.5 shadow-sm hover:bg-emerald-600 transition-colors"
-                        >
-                          <Phone size={12} /> WhatsApp
-                        </button>
-                        <button
-                          onClick={() => {
-                            const u = users.find(x => x.uid === selectedInboxTeamMemberId);
-                            if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
-                            const msg = `Salut ${u.displayName}, nouveau lead (Quick Entry) :\nClient: ${inboxForm.contactName}\nDate: ${inboxForm.eventStartDate}\nNote: ${inboxForm.note || 'Aucune'}`;
-                            openSMS(u.phone, msg);
-                          }}
-                          className="py-1.5 rounded-lg bg-slate-700 text-white font-black text-[9px] uppercase flex flex-col items-center gap-0.5 shadow-sm hover:bg-slate-800 transition-colors"
-                        >
-                          <Briefcase size={12} /> SMS
-                        </button>
-                        <button
-                          onClick={() => {
-                            const u = users.find(x => x.uid === selectedInboxTeamMemberId);
-                            if (!u?.email) return alert("Pas d'email renseigné pour ce membre.");
-                            const subject = `Nouveau Lead : ${inboxForm.companyName || inboxForm.contactName}`;
-                            const body = `Salut ${u.displayName},\n\nNouveau lead (Quick Entry) :\n\nClient : ${inboxForm.contactName}\nDate : ${inboxForm.eventStartDate}\n\nNote : ${inboxForm.note || ''}`;
-                            window.open(`mailto:${u.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
-                          }}
-                          className="py-1.5 rounded-lg bg-blue-500 text-white font-black text-[9px] uppercase flex flex-col items-center gap-0.5 shadow-sm hover:bg-blue-600 transition-colors"
-                        >
-                          <Mail size={12} /> Email
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <input type="text" placeholder="Nom Contact *" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.contactName} onChange={(e) => setInboxForm({ ...inboxForm, contactName: e.target.value })} />
-                <input type="text" placeholder="Entreprise" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.companyName} onChange={(e) => setInboxForm({ ...inboxForm, companyName: e.target.value })} />
-                <input type="email" placeholder="Email" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-bold" value={inboxForm.email} onChange={(e) => setInboxForm({ ...inboxForm, email: e.target.value })} />
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="date" className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold" value={inboxForm.eventStartDate} onChange={(e) => setInboxForm({ ...inboxForm, eventStartDate: e.target.value })} />
-                  <input type="date" className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold" value={inboxForm.eventEndDate} onChange={(e) => setInboxForm({ ...inboxForm, eventEndDate: e.target.value })} />
-                </div>
-                <RoomsInputs compact value={inboxForm.rooms} onChange={(next) => setInboxForm({ ...inboxForm, rooms: next })} />
-                <div className="flex gap-2">
-                  {(['email', 'phone', 'website'] as InboxSource[]).map(s => (
-                    <button key={s} onClick={() => setInboxForm({ ...inboxForm, source: s })} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase border ${inboxForm.source === s ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>{s}</button>
-                  ))}
-                </div>
-                <button onClick={() => { onUpdateInbox?.([{ ...inboxForm, id: uid('inbox'), status: 'to_process', requestDate: new Date().toISOString() }, ...inbox]); setInboxForm({ contactName: '', companyName: '', email: '', phone: '', source: 'email', rooms: defaultRooms() }); setSelectedInboxVipId(''); }} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 transition-all">Enregistrer Demande</button>
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col h-full overflow-hidden">
-              <div className="mb-4 p-4 rounded-[24px] border bg-white dark:bg-slate-800 flex flex-col gap-4">
-                {/* Barre de recherche Globale */}
-                <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border w-full">
-                  <Search size={16} className="text-slate-400 mr-2" />
-                  <input type="text" placeholder="Filtrer l'inbox (nom, société, email)..." value={inboxState.search} onChange={(e) => inboxState.setSearch(e.target.value)} className="bg-transparent outline-none w-full text-xs font-bold" />
-                </div>
-
-                {/* [NEW] BARRE DE FILTRES AVANCÉE */}
-                <div className="flex flex-wrap gap-2 items-center">
-                  <select
-                    value={inboxFilters.status}
-                    onChange={(e) => setInboxFilters({ ...inboxFilters, status: e.target.value })}
-                    className="bg-white dark:bg-slate-900 border dark:border-slate-700 text-[10px] font-black uppercase py-2 px-3 rounded-lg outline-none cursor-pointer"
-                  >
-                    <option value="all">Tous Status</option>
-                    <option value="pas_commence">⚪ À Traiter</option>
-                    <option value="en_cours">🔵 En cours</option>
-                    <option value="termine">🟢 Terminé</option>
-                  </select>
-
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Resp..."
-                      value={inboxFilters.responsable}
-                      onChange={(e) => setInboxFilters({ ...inboxFilters, responsable: e.target.value })}
-                      className="w-24 py-2 px-3 pl-7 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-lg text-[10px] font-bold outline-none"
-                    />
-                    <User size={10} className="absolute left-2 top-2.5 text-slate-400" />
-                  </div>
-
-                  <button
-                    onClick={() => setInboxFilters({ ...inboxFilters, onlyOverdue: !inboxFilters.onlyOverdue })}
-                    className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase border transition-colors flex items-center gap-1 ${inboxFilters.onlyOverdue ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'}`}
-                  >
-                    <AlertTriangle size={12} /> Retards J+7
-                  </button>
-
-                  {/* Tri Date */}
-                  <button
-                    onClick={() => setInboxFilters({ ...inboxFilters, sortOrder: inboxFilters.sortOrder === 'date_desc' ? 'date_asc' : 'date_desc' })}
-                    className="px-3 py-2 rounded-lg text-[10px] font-black uppercase border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 flex items-center gap-1"
-                  >
-                    <ArrowDownUp size={12} /> {inboxFilters.sortOrder === 'date_desc' ? 'Récent' : 'Ancien'}
-                  </button>
-                </div>
-              </div>
-
-              {/* [NEW] LISTE DES MESSAGES MISE À JOUR */}
-              <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pb-24">
-                {filteredInbox.map((item) => {
-                  const isCritical = isOverdueAlert(item.dateRelance);
-
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => setEditingInboxItem(item)}
-                      className={`cursor-pointer group relative p-4 rounded-2xl border flex justify-between items-start bg-white dark:bg-slate-800 transition-all hover:shadow-md 
-                        ${isCritical ? 'border-red-300 bg-red-50/30 dark:bg-red-900/10' : 'border-slate-100 dark:border-slate-700'}
-                      `}
-                    >
-                      <div className="flex gap-4 w-full">
-                        {/* Indicateur visuel Statut */}
-                        <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${item.statut === 'termine' ? 'bg-emerald-500' :
-                          item.statut === 'en_cours' ? 'bg-blue-500' : 'bg-slate-200'
-                          }`} />
-
-                        <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-400 h-fit">
-                          {item.source === 'email' ? <Mail size={18} /> : item.source === 'phone' ? <Phone size={18} /> : <Globe size={18} />}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="font-bold text-sm truncate">{item.contactName}</h4>
-                              <p className="text-xs text-slate-500 font-medium truncate">{item.companyName || 'Particulier'}</p>
-                            </div>
-                            {/* Badges */}
-                            <div className="flex flex-col items-end gap-1">
-                              {item.devisEnvoye && <span className="bg-emerald-100 text-emerald-700 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Devis OK</span>}
-                              {isCritical && <span className="bg-red-100 text-red-600 text-[8px] px-1.5 py-0.5 rounded font-black uppercase flex items-center gap-1 animate-pulse"><AlertTriangle size={8} /> Relance</span>}
-                            </div>
-                          </div>
-
-                          {/* Infos Responsable & Date */}
-                          <div className="flex items-center gap-3 mt-2">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">Reçu: {new Date(item.requestDate).toLocaleDateString()}</p>
-                            {item.responsable && (
-                              <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">
-                                <User size={8} /> {item.responsable}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Actions Rapides au Survol + Bouton Archiver Rapide */}
-                      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); handleArchiveRequest(item.id); }} className="p-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-red-100 hover:text-red-500 transition-colors" title="Archiver"><Archive size={12} /></button>
-                      </div>
+                  {/* ✅ BLOC TRANSMISSION ÉQUIPE (Visuel Distinct) */}
+                  <div className="p-5 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-100 dark:border-indigo-900/50 mb-6 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-10">
+                      <Send size={64} className="text-indigo-500" />
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* --- AUTRES VUES --- */}
-        {activeTab === 'contacts' && (
-          <div className="h-full overflow-y-auto p-4 md:px-6 pb-20 no-scrollbar relative">
-            <div className="flex gap-4 mb-4">
-              {/* Barre de recherche contacts */}
-              <div className="flex-1 flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border border-transparent focus-within:border-indigo-500 transition-all">
-                <Search size={18} className="text-slate-400 mr-3" />
-                <input
-                  type="text"
-                  placeholder="Rechercher un contact..."
-                  value={contactSearch}
-                  onChange={(e) => setContactSearch(e.target.value)}
-                  className="bg-transparent outline-none w-full text-sm font-bold text-slate-700 dark:text-white"
-                />
-              </div>
+                    <h4 className="text-sm font-black uppercase text-indigo-800 dark:text-indigo-200 mb-3 flex items-center gap-2 relative z-10">
+                      📣 Transmettre le lead à l'équipe
+                    </h4>
 
-              {/* ✅ NOUVEAU BOUTON EXPORT CONTACTS */}
-              <button
-                onClick={handleExportContactsCSV}
-                className="px-6 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:opacity-90 transition-opacity"
-              >
-                <Download size={16} /> Exporter
-              </button>
-            </div>
+                    <div className="flex flex-col gap-3 relative z-10">
+                      <select
+                        className="w-full p-3 rounded-xl bg-white dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-xs"
+                        value={selectedTeamMemberId}
+                        onChange={(e) => setSelectedTeamMemberId(e.target.value)}
+                      >
+                        <option value="">-- Choisir un membre --</option>
+                        {users.map(u => (
+                          <option key={u.uid} value={u.uid}>{u.displayName || u.email} ({u.role})</option>
+                        ))}
+                      </select>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredGridContacts.map((contact: any) => (
-                <div
-                  key={contact.id}
-                  onClick={() => setViewingContact(contact)}
-                  className={`p-4 rounded-2xl border flex items-center gap-4 transition-all hover:shadow-md cursor-pointer ${userSettings.darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-100 shadow-sm hover:bg-slate-50'}`}
-                >
-                  {/* Avatar/Initials */}
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${contact.color || 'bg-slate-200 text-slate-500'}`}>
-                    {contact.initials || contact.name.slice(0, 2).toUpperCase()}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-sm truncate">{contact.name}</h4>
-                    <p className="text-xs text-slate-400 truncate font-medium uppercase tracking-wide">{contact.company || contact.companyName || 'Particulier'}</p>
-
-                    {/* Action buttons */}
-                    <div className="flex gap-2 mt-2">
-                      {contact.phone && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openSMS(contact.phone, ''); }}
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 transition-colors"
-                          title="SMS"
-                        >
-                          <Briefcase size={14} />
-                        </button>
-                      )}
-                      {contact.phone && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openWhatsApp(contact.phone, ''); }}
-                          className="p-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 transition-colors"
-                          title="WhatsApp"
-                        >
-                          <Phone size={14} />
-                        </button>
-                      )}
-                      {contact.email && (
-                        <a
-                          href={`mailto:${contact.email}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 transition-colors"
-                          title="Email"
-                        >
-                          <Mail size={14} />
-                        </a>
+                      {selectedTeamMemberId && (
+                        <div className="grid grid-cols-3 gap-2 animate-in slide-in-from-top-2 fade-in">
+                          <button
+                            onClick={() => {
+                              const u = users.find(x => x.uid === selectedTeamMemberId);
+                              if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
+                              const msg = `Salut ${u.displayName}, nouveau lead à traiter :\nClient: ${form.contactName}\nDate: ${form.startDate}\nNote: ${form.note || 'Aucune'}`;
+                              openWhatsApp(u.phone, msg);
+                            }}
+                            className="py-2 rounded-xl bg-emerald-500 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-emerald-600 transition-colors"
+                          >
+                            <Phone size={16} /> WhatsApp
+                          </button>
+                          <button
+                            onClick={() => {
+                              const u = users.find(x => x.uid === selectedTeamMemberId);
+                              if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
+                              const msg = `Salut ${u.displayName}, nouveau lead à traiter :\nClient: ${form.contactName}\nDate: ${form.startDate}\nNote: ${form.note || 'Aucune'}`;
+                              openSMS(u.phone, msg);
+                            }}
+                            className="py-2 rounded-xl bg-slate-700 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-slate-800 transition-colors"
+                          >
+                            <Briefcase size={16} /> SMS
+                          </button>
+                          <button
+                            onClick={() => {
+                              const u = users.find(x => x.uid === selectedTeamMemberId);
+                              if (!u?.email) return alert("Pas d'email renseigné pour ce membre.");
+                              const subject = `Nouveau Lead : ${form.groupName}`;
+                              const body = `Salut ${u.displayName},\n\nNouveau lead à traiter :\n\nClient : ${form.contactName}\nGroupe : ${form.groupName}\nDate : ${form.startDate}\n\nNote : ${form.note || ''}`;
+                              window.open(`mailto:${u.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+                            }}
+                            className="py-2 rounded-xl bg-blue-500 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-blue-600 transition-colors"
+                          >
+                            <Mail size={16} /> Email
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
-                </div>
-              ))}
-              {filteredGridContacts.length === 0 && (
-                <div className="col-span-full text-center py-10 opacity-50">
-                  <Users size={48} className="mx-auto mb-2 text-slate-300" />
-                  <p className="text-sm font-bold text-slate-400">Aucun contact trouvé.</p>
-                </div>
-              )}
-            </div>
 
-            {/* MODAL DETAIL CONTACT */}
-            {viewingContact && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
-                <div className={`w-full max-w-lg rounded-[32px] p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto no-scrollbar ${userSettings.darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
-                  <button
-                    onClick={() => setViewingContact(null)}
-                    className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors"
-                  >
-                    <X size={20} />
-                  </button>
-
-                  <div className="flex flex-col items-center mb-6">
-                    <div className={`w-20 h-20 rounded-full flex items-center justify-center font-bold text-2xl shadow-md mb-3 ${viewingContact.color || 'bg-slate-200 text-slate-500'}`}>
-                      {viewingContact.initials || viewingContact.name.slice(0, 2).toUpperCase()}
-                    </div>
-                    <h3 className="text-xl font-black">{viewingContact.name}</h3>
-                    <p className="text-sm text-slate-400 font-bold uppercase">{viewingContact.company || viewingContact.companyName || 'Particulier'}</p>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
-                      <span className="text-2xl font-black text-indigo-600 block">{getContactHistory(viewingContact).total}</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Totaux</span>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
-                      <span className="text-2xl font-black text-emerald-500 block">{getContactHistory(viewingContact).validated}</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Dossiers Validés</span>
-                    </div>
-                  </div>
-
-                  {/* Infos */}
-                  <div className="space-y-3 mb-6">
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                      <Phone size={18} className="text-slate-400" />
-                      <span className="font-bold text-sm">{viewingContact.phone || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                      <Mail size={18} className="text-slate-400" />
-                      <span className="font-bold text-sm">{viewingContact.email || '-'}</span>
-                    </div>
-                  </div>
-
-                  {/* Historique */}
-                  <h4 className="font-black text-sm uppercase text-slate-400 mb-3 ml-1">Historique Récent</h4>
-                  <div className="space-y-2">
-                    {getContactHistory(viewingContact).history.length > 0 ? (
-                      getContactHistory(viewingContact).history.map((lead: Lead) => (
-                        <div key={lead.id} className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                          <div>
-                            <p className="font-bold text-xs">{lead.groupName}</p>
-                            <p className="text-[10px] text-slate-400">{new Date(lead.requestDate).toLocaleDateString()}</p>
-                          </div>
-                          <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${lead.status === 'valide' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                            {lead.status}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-center text-xs text-slate-400 italic py-4">Aucun historique de dossier.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'archives' && (
-          <div className="w-full h-full flex flex-col p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black">Historique & Archives</h3>
-              <button onClick={handleExportCSV} className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700">
-                <Download size={16} /> Exporter Excel
-              </button>
-            </div>
-
-            {/* LISTE DES DOSSIERS ARCHIVÉS */}
-            <div className="flex-1 rounded-[32px] border bg-white dark:bg-slate-800 p-4 overflow-auto no-scrollbar">
-              {archivedLeads.length > 0 ? (
-                <div className="space-y-3">
-                  {archivedLeads.map(lead => (
-                    <div key={lead.id} className="p-4 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 flex justify-between items-center opacity-75 hover:opacity-100 transition-opacity">
-                      <div>
-                        <h4 className="font-bold text-sm">{lead.groupName}</h4>
-                        <p className="text-xs text-slate-500">{lead.contactName} • {new Date(lead.requestDate).toLocaleDateString()}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleRestoreLead(lead)}
-                          className="px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg text-xs font-bold uppercase flex items-center gap-1 hover:bg-blue-200"
-                        >
-                          <RotateCcw size={14} /> Restaurer
-                        </button>
-                        <button
-                          onClick={() => handleDeleteDefinitely(lead.id)}
-                          className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Supprimer définitivement"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center opacity-30">
-                  <FolderOpen size={48} className="mb-4 text-slate-400" />
-                  <p className="text-center text-slate-400 font-bold">Aucun dossier archivé.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* --- FORMULAIRE NOUVEAU LEAD --- */}
-        {activeTab === 'new_lead' && (
-          <div className="w-full max-w-2xl mx-auto overflow-y-auto no-scrollbar py-6">
-            <div className={`p-8 rounded-[40px] border shadow-sm space-y-6 ${userSettings.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-              <h3 className="text-2xl font-black uppercase tracking-tight">Qualifier une demande</h3>
-
-              {/* BOUTONS SMS / WHATSAPP */}
-              <div className="space-y-4">
-                {/* SÉLECTEUR DE CONTACT */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact (Application)</label>
-                  <select
-                    className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-sm"
-                    value={selectedVipId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedVipId(id);
-                      const c = appContacts.find((x: any) => String(x.id) === id);
-                      if (c) {
-                        setForm({
-                          ...form,
-                          contactName: c.name,
-                          email: c.email || '',
-                          phone: c.phone || ''
-                        });
-                      }
-                    }}
-                  >
-                    <option value="">— Sélectionner —</option>
-                    {vipCandidates.map((c: any) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.company ? `• ${c.company}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex gap-2 pb-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const msg = buildMessage({
-                        groupName: form.groupName,
-                        contactName: form.contactName,
-                        email: form.email,
-                        phone: form.phone,
-                        startDate: form.startDate,
-                        endDate: form.endDate,
-                        pax: form.pax,
-                        rooms: form.rooms,
-                        note: form.note,
-                        sourceLabel: 'Nouveau Lead'
-                      });
-                      openSMS(form.phone, msg);
-                    }}
-                    className="flex-1 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-black text-xs uppercase hover:bg-slate-100 transition-colors"
-                  >
-                    SMS
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const msg = buildMessage({
-                        groupName: form.groupName,
-                        contactName: form.contactName,
-                        email: form.email,
-                        phone: form.phone,
-                        startDate: form.startDate,
-                        endDate: form.endDate,
-                        pax: form.pax,
-                        rooms: form.rooms,
-                        note: form.note,
-                        sourceLabel: 'Nouveau Lead'
-                      });
-                      openWhatsApp(form.phone, msg);
-                    }}
-                    className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-700 transition-colors"
-                  >
-                    WhatsApp
-                  </button>
-                </div>
-
-                {/* ✅ BLOC TRANSMISSION ÉQUIPE (Visuel Distinct) */}
-                <div className="p-5 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-100 dark:border-indigo-900/50 mb-6 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-2 opacity-10">
-                    <Send size={64} className="text-indigo-500" />
-                  </div>
-
-                  <h4 className="text-sm font-black uppercase text-indigo-800 dark:text-indigo-200 mb-3 flex items-center gap-2 relative z-10">
-                    📣 Transmettre le lead à l'équipe
-                  </h4>
-
-                  <div className="flex flex-col gap-3 relative z-10">
-                    <select
-                      className="w-full p-3 rounded-xl bg-white dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 outline-none font-bold text-xs"
-                      value={selectedTeamMemberId}
-                      onChange={(e) => setSelectedTeamMemberId(e.target.value)}
-                    >
-                      <option value="">-- Choisir un membre --</option>
-                      {users.map(u => (
-                        <option key={u.uid} value={u.uid}>{u.displayName || u.email} ({u.role})</option>
-                      ))}
-                    </select>
-
-                    {selectedTeamMemberId && (
-                      <div className="grid grid-cols-3 gap-2 animate-in slide-in-from-top-2 fade-in">
-                        <button
-                          onClick={() => {
-                            const u = users.find(x => x.uid === selectedTeamMemberId);
-                            if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
-                            const msg = `Salut ${u.displayName}, nouveau lead à traiter :\nClient: ${form.contactName}\nDate: ${form.startDate}\nNote: ${form.note || 'Aucune'}`;
-                            openWhatsApp(u.phone, msg);
-                          }}
-                          className="py-2 rounded-xl bg-emerald-500 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-emerald-600 transition-colors"
-                        >
-                          <Phone size={16} /> WhatsApp
-                        </button>
-                        <button
-                          onClick={() => {
-                            const u = users.find(x => x.uid === selectedTeamMemberId);
-                            if (!u?.phone) return alert("Pas de téléphone renseigné pour ce membre.");
-                            const msg = `Salut ${u.displayName}, nouveau lead à traiter :\nClient: ${form.contactName}\nDate: ${form.startDate}\nNote: ${form.note || 'Aucune'}`;
-                            openSMS(u.phone, msg);
-                          }}
-                          className="py-2 rounded-xl bg-slate-700 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-slate-800 transition-colors"
-                        >
-                          <Briefcase size={16} /> SMS
-                        </button>
-                        <button
-                          onClick={() => {
-                            const u = users.find(x => x.uid === selectedTeamMemberId);
-                            if (!u?.email) return alert("Pas d'email renseigné pour ce membre.");
-                            const subject = `Nouveau Lead : ${form.groupName}`;
-                            const body = `Salut ${u.displayName},\n\nNouveau lead à traiter :\n\nClient : ${form.contactName}\nGroupe : ${form.groupName}\nDate : ${form.startDate}\n\nNote : ${form.note || ''}`;
-                            window.open(`mailto:${u.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
-                          }}
-                          className="py-2 rounded-xl bg-blue-500 text-white font-black text-[10px] uppercase flex flex-col items-center gap-1 shadow-md hover:bg-blue-600 transition-colors"
-                        >
-                          <Mail size={16} /> Email
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nom du Groupe *</label>
-                  <input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" placeholder="Ex: Mariage Durand" value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact Principal *</label>
-                    <input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} />
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nom du Groupe *</label>
+                    <input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" placeholder="Ex: Mariage Durand" value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })} />
                   </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">PAX Prévu</label>
-                    <input type="number" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={form.pax} onChange={(e) => setForm({ ...form, pax: parseInt(e.target.value) || 0 })} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact Principal *</label>
+                      <input type="text" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 ml-1">PAX Prévu</label>
+                      <input type="number" className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={form.pax} onChange={(e) => setForm({ ...form, pax: parseInt(e.target.value) || 0 })} />
+                    </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <input type="date" className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={toDateInputValue(form.startDate)} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+                    <input type="date" className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={toDateInputValue(form.endDate)} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+                  </div>
+                  <RoomsInputs value={form.rooms} onChange={(next) => setForm({ ...form, rooms: next })} />
+                  <VenuesInputs
+                    availableVenues={venues}
+                    selectedVenues={form.venues || []}
+                    onChange={(next) => setForm({ ...form, venues: next })}
+                    onOpenConfig={onOpenConfig}
+                  />
+                  <textarea className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm resize-none h-32" placeholder="Commentaires..." value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <input type="date" className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={toDateInputValue(form.startDate)} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-                  <input type="date" className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm" value={toDateInputValue(form.endDate)} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+                <div className="pt-4 flex justify-end">
+                  <button onClick={handleCreateLead} className="px-8 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-colors">Ajouter au Pipeline</button>
                 </div>
-                <RoomsInputs value={form.rooms} onChange={(next) => setForm({ ...form, rooms: next })} />
-                <textarea className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 font-bold text-sm resize-none h-32" placeholder="Commentaires..." value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
-              </div>
-              <div className="pt-4 flex justify-end">
-                <button onClick={handleCreateLead} className="px-8 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-colors">Ajouter au Pipeline</button>
               </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
-      </div>
+      </div >
 
       <InboxDetailPanel
         isOpen={!!editingInboxItem}
@@ -1313,7 +1414,7 @@ const SalesCRMView: React.FC<SalesCRMViewProps> = (props) => {
         onValidate={handleValidateRequest}
       />
 
-    </div>
+    </div >
   );
 };
 

@@ -16,7 +16,7 @@ import {
 // --- TYPES & SERVICES ---
 import {
   Contact, Task, Group, CalendarEvent, UserSettings, BusinessConfig,
-  CatalogItem, Venue, Client, ChatMessage, Room, MaintenanceTicket
+  CatalogItem, Venue, Client, ChatMessage, Room, MaintenanceTicket, SpaRequest, Lead
 } from './types';
 import { AuthProvider, useAuth } from './services/authContext';
 import {
@@ -73,6 +73,8 @@ import Sidebar from './components/Sidebar';
 import MobileNavBar from './components/MobileNavBar';
 import SplashScreen from './components/SplashScreen';
 import CalendarView from './components/CalendarView';
+import SpaBookingModal from './components/SpaBookingModal';
+import LeadDetailModal from './components/LeadDetailModal';
 
 const GOOGLE_CLIENT_ID = "";
 
@@ -112,6 +114,14 @@ const AuthenticatedApp: React.FC = () => {
   const [selectedGroupDetail, setSelectedGroupDetail] = useState<Group | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
+  // Spa Modal State
+  const [showSpaModal, setShowSpaModal] = useState(false);
+  const [editSpaRequest, setEditSpaRequest] = useState<SpaRequest | null>(null);
+  // Lead Modal State
+  const [showLeadModal, setShowLeadModal] = useState(false);
+  const [selectedLeadDetail, setSelectedLeadDetail] = useState<Lead | null>(null);
+  const [crmSelectionLeadId, setCrmSelectionLeadId] = useState<string | number | null>(null);
+
   const [showContactModal, setShowContactModal] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [selectedContactDetail, setSelectedContactDetail] = useState<Contact | null>(null);
@@ -297,6 +307,92 @@ const AuthenticatedApp: React.FC = () => {
     });
     setShowTaskModal(true);
     navigate('/todo');
+    setShowTaskModal(true);
+    navigate('/todo');
+  };
+
+  // --- DRAG & DROP HANDLERS (New) ---
+  const handleUpdateTaskDate = (taskId: string | number, date: string, time: string) => {
+    let task = todos.find(t => String(t.id) === String(taskId));
+
+    // Fallback: Check if ID needs 'task-' prefix or has it stripped
+    if (!task) {
+      if (String(taskId).startsWith('task-')) {
+        const stripped = String(taskId).replace('task-', '');
+        task = todos.find(t => String(t.id) === stripped);
+      } else {
+        task = todos.find(t => String(t.id) === `task-${taskId}`);
+      }
+    }
+
+    if (task) {
+      const updated = { ...task, dueDate: date, time: time }; // Update fields
+      saveDocument(DB_COLLECTIONS.TASKS, updated);
+      // Optional: Toast notification could go here
+    }
+  };
+
+  const handleUpdateLeadDate = (leadId: string | number, dateIso: string) => {
+    let lead = leads.find(l => String(l.id) === String(leadId));
+
+    if (!lead) {
+      if (String(leadId).startsWith('lead-')) {
+        const stripped = String(leadId).replace('lead-', '');
+        lead = leads.find(l => String(l.id) === stripped);
+      } else {
+        lead = leads.find(l => String(l.id) === `lead-${leadId}`);
+      }
+    }
+
+    if (lead) {
+      const updated = { ...lead, requestDate: dateIso };
+      // IMPORTANT: Leads might be in GROUPS or dedicated collection. Assuming GROUPS based on read logic.
+      saveDocument(DB_COLLECTIONS.GROUPS, updated);
+    }
+  };
+
+  const handleUpdateSpaRequest = (requestId: string | number, date: string, time: string) => {
+    let request = spaRequests.find(r => String(r.id) === String(requestId));
+
+    if (!request) {
+      if (String(requestId).startsWith('spa-')) {
+        const stripped = String(requestId).replace('spa-', '');
+        request = spaRequests.find(r => String(r.id) === stripped);
+      } else {
+        request = spaRequests.find(r => String(r.id) === `spa-${requestId}`);
+      }
+    }
+
+    if (request) {
+      const updated = { ...request, date: date, time: time };
+      saveDocument(DB_COLLECTIONS.SPA, updated);
+    }
+  };
+
+  const handleSaveSpaRequest = (request: Partial<SpaRequest>) => {
+    // If it has an ID, it's an update, otherwise create (though modal usually handles ID generation for new)
+    // But for edits passed from Calendar, we have ID.
+    if (request.id) {
+      saveDocument(DB_COLLECTIONS.SPA, request as SpaRequest);
+    } else {
+      // New request logic if needed, but usually handled by SpaView. 
+      // We can support creation too.
+      const newRequest = {
+        ...request,
+        id: `spa-${Date.now()}`,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+      saveDocument(DB_COLLECTIONS.SPA, newRequest);
+    }
+    setEditSpaRequest(null);
+    setShowSpaModal(false);
+  };
+
+  const handleDeleteSpaRequest = (id: string) => {
+    deleteDocument(DB_COLLECTIONS.SPA, id);
+    setEditSpaRequest(null);
+    setShowSpaModal(false);
   };
 
   const handleGoogleLogin = (token: string) => { };
@@ -396,6 +492,7 @@ const AuthenticatedApp: React.FC = () => {
                       leads={leads}
                       inbox={inbox}
                       spaRequests={spaRequests}
+                      channels={channels}
                       onNavigate={(path) => navigate(path)}
                       onTaskToggle={(id) =>
                         handleTaskStatusChange(
@@ -424,6 +521,7 @@ const AuthenticatedApp: React.FC = () => {
                         setEditContact(null);
                         setShowContactModal(true);
                       }}
+                      onSendMessage={handleSendMessage}
                       onSaveDashboardWidgets={(widgets) =>
                         saveSettings({ dashboardWidgets: widgets })
                       }
@@ -448,6 +546,21 @@ const AuthenticatedApp: React.FC = () => {
                       spaRequests={spaRequests}
                       leads={leads}
                       onUpdateEvent={handleSaveEvent}
+                      onUpdateTask={handleUpdateTaskDate}
+                      onUpdateLead={handleUpdateLeadDate}
+                      onUpdateSpaRequest={handleUpdateSpaRequest}
+                      onSpaClick={(request) => {
+                        setEditSpaRequest(request);
+                        setShowSpaModal(true);
+                      }}
+                      onTaskClick={(task) => {
+                        setEditTask(task);
+                        setShowTaskModal(true);
+                      }}
+                      onLeadClick={(lead) => {
+                        setSelectedLeadDetail(lead);
+                        setShowLeadModal(true);
+                      }}
                     />
                   </PageTransition>
                   : <Navigate to="/" />
@@ -600,6 +713,13 @@ const AuthenticatedApp: React.FC = () => {
                       onUpdateClients={(c) => c.forEach(cl => saveDocument(DB_COLLECTIONS.GROUPS, { ...cl, type_doc: 'client' }))}
                       users={allUsers}
                       onNavigate={(path) => navigate(path)}
+                      initialLeadId={crmSelectionLeadId}
+                      venues={venues}
+                      onOpenConfig={() => {
+                        setShowBusinessConfigModal(true);
+                        // NOTE: BusinessConfigModal Tab management is local to the modal (activeTab state),
+                        // but the user can then click the "Lieux" tab.
+                      }}
                     />
                   </PageTransition>
                   : <Navigate to="/" />
@@ -731,6 +851,27 @@ const AuthenticatedApp: React.FC = () => {
       <EventModal isOpen={showEventModal} onClose={() => { setShowEventModal(false); setEditEvent(null); }} contacts={contacts} onSave={handleSaveEvent} onDelete={handleDeleteEvent} userSettings={userSettings} editEvent={editEvent} onTriggerCommunication={handleTriggerCommunication} />
       <GroupDetailModal isOpen={selectedGroupDetail !== null} onClose={() => setSelectedGroupDetail(null)} group={selectedGroupDetail} allGroups={groups} clients={clients} contacts={contacts} onEdit={(g) => { setSelectedGroupDetail(null); setEditGroup(g); setShowGroupModal(true); }} onSave={handleSaveGroup} userSettings={userSettings} businessConfig={businessConfig} catalog={catalog} venues={venues} />
       <ContactDetailModal isOpen={selectedContactDetail !== null} onClose={() => setSelectedContactDetail(null)} contact={selectedContactDetail} onEdit={(c) => { setSelectedContactDetail(null); setEditContact(c); setShowContactModal(true); }} userSettings={userSettings} />
+
+      <SpaBookingModal
+        isOpen={showSpaModal}
+        onClose={() => { setShowSpaModal(false); setEditSpaRequest(null); }}
+        onSave={handleSaveSpaRequest}
+        onDelete={handleDeleteSpaRequest}
+        userSettings={userSettings}
+        initialData={editSpaRequest}
+      />
+
+      <LeadDetailModal
+        isOpen={showLeadModal}
+        onClose={() => { setShowLeadModal(false); setSelectedLeadDetail(null); }}
+        lead={selectedLeadDetail}
+        userSettings={userSettings}
+        users={allUsers}
+        onViewInPipeline={(lead) => {
+          setCrmSelectionLeadId(lead.id);
+          navigate('/groups/crm');
+        }}
+      />
     </div>
   );
 };

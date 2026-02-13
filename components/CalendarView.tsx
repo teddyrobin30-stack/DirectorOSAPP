@@ -3,7 +3,7 @@ import {
     ChevronLeft, ChevronRight, Plus,
     Calendar as CalendarIcon, Clock, MapPin,
     Layers, ListFilter, CalendarDays, Users, RefreshCw, CheckCircle2, Video, Tag, Briefcase,
-    Filter, MoreHorizontal, Mail, MessageCircle, Phone, AlertTriangle
+    Filter, MoreHorizontal, Mail, MessageCircle, Phone, AlertTriangle, GripHorizontal
 } from 'lucide-react';
 import { CalendarEvent, UserSettings, Group, Task, SpaRequest, Lead } from '../types';
 
@@ -18,13 +18,20 @@ interface CalendarViewProps {
     spaRequests: SpaRequest[];
     leads: Lead[];
     onUpdateEvent?: (event: CalendarEvent) => void;
+    onUpdateTask?: (taskId: string | number, date: string, time: string) => void;
+    onUpdateLead?: (leadId: string | number, date: string) => void;
+    onUpdateSpaRequest?: (requestId: string | number, date: string, time: string) => void;
+    onSpaClick?: (request: SpaRequest) => void;
+    onTaskClick?: (task: Task) => void;
+    onLeadClick?: (lead: Lead) => void;
 }
 
 type ViewType = 'day' | 'week' | 'month';
 type FilterType = 'MY_AGENDA' | 'SPA' | 'CRM' | 'TASKS' | 'GROUPS';
 
 const CalendarView: React.FC<CalendarViewProps> = ({
-    events, todos, userSettings, onAdd, onEventClick, onGroupClick, groups, spaRequests, leads, onUpdateEvent
+    events, todos, userSettings, onAdd, onEventClick, onGroupClick, groups, spaRequests, leads,
+    onUpdateEvent, onUpdateTask, onUpdateLead, onUpdateSpaRequest, onSpaClick, onTaskClick, onLeadClick
 }) => {
     const [view, setView] = useState<ViewType>('week');
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -46,9 +53,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         try {
             if (!input) return null;
             if (input instanceof Date) return input;
-            if (typeof input === 'object' && input.seconds) return new Date(input.seconds * 1000); // Firestore
-            if (typeof input === 'string') return new Date(input);
-            return null;
+            // Handle Firestore Timestamp
+            if (typeof input === 'object' && 'seconds' in input) {
+                return new Date(input.seconds * 1000);
+            }
+            // Fallback for any other format (string, number, or other object structure)
+            const d = new Date(input);
+            return isNaN(d.getTime()) ? null : d;
         } catch (e) {
             console.warn("Date parsing error:", input);
             return null;
@@ -58,6 +69,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     // --- 1. DATA AGGREGATION (DEFENSIVE) ---
     const allEvents = useMemo(() => {
         let aggregated: any[] = [];
+        console.log('DEBUG: Aggregating events. Filters:', filters);
 
         // 1. My Agenda (Events)
         if (filters.MY_AGENDA && Array.isArray(events)) {
@@ -82,9 +94,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         if (filters.SPA && Array.isArray(spaRequests)) {
             aggregated = aggregated.concat(spaRequests.map(r => {
                 if (!r.date || !r.time) return null;
+                // Fix: Prevent double prefixing
+                const eventId = r.id.toString().startsWith('spa-') ? r.id : `spa-${r.id}`;
                 return {
-                    id: `spa-${r.id}`,
-                    title: `💆‍♀️ Soin: ${r.clientName}`,
+                    id: eventId,
+                    title: `💆‍♀️ ${r.isDuo ? '[DUO] ' : ''}Soin: ${r.clientName}`,
                     startObj: safeDate(`${r.date}T${r.time}`),
                     displayTime: r.time,
                     source: 'SPA',
@@ -103,11 +117,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             aggregated = aggregated.concat(leads.map(l => {
                 const sd = safeDate(l.requestDate); // Fallback to requestDate
                 if (!sd) return null;
+                const eventId = l.id.toString().startsWith('lead-') ? l.id : `lead-${l.id}`;
                 return {
-                    id: `lead-${l.id}`,
+                    id: eventId,
                     title: `📞 Rappel: ${l.contactName}`,
                     startObj: sd,
-                    displayTime: '09:00',
+                    displayTime: sd.getHours().toString().padStart(2, '0') + ':' + sd.getMinutes().toString().padStart(2, '0'),
                     source: 'CRM',
                     color: 'bg-orange-500',
                     textColor: 'text-orange-600',
@@ -124,11 +139,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             aggregated = aggregated.concat(todos.filter(t => t.dueDate).map(t => {
                 const sd = safeDate(t.dueDate);
                 if (!sd) return null;
+
+                // Fix: Merge time if exists
+                if (t.time && t.time.includes(':')) {
+                    const [h, m] = t.time.split(':').map(Number);
+                    if (!isNaN(h)) sd.setHours(h, m || 0);
+                }
+
+                const eventId = t.id.toString().startsWith('task-') ? t.id : `task-${t.id}`;
                 return {
-                    id: `task-${t.id}`,
+                    id: eventId,
                     title: `✅ ${t.text}`,
                     startObj: sd,
-                    displayTime: 'All Day',
+                    displayTime: t.time || 'All Day',
                     source: 'TASKS',
                     color: 'bg-emerald-500',
                     textColor: 'text-emerald-600',
@@ -142,9 +165,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
         // 5. Groups
         if (filters.GROUPS && Array.isArray(groups)) {
+            console.log('DEBUG: Processing Groups:', groups.length);
             aggregated = aggregated.concat(groups.map(g => {
-                const sd = safeDate(g.startDate);
-                const ed = safeDate(g.endDate);
+                // Fallback date parsing (handle legacy structure)
+                const sd = safeDate(g.startDate || (g as any).start || (g as any).date);
+                const ed = safeDate(g.endDate || (g as any).end || (g as any).endDate);
+
+                if (typeof g.name !== 'string' || !sd) {
+                    console.warn('DEBUG: Malformed Group:', JSON.stringify(g, null, 2));
+                }
+
                 if (!sd || !ed) return null;
                 return {
                     id: `img-${g.id}`,
@@ -163,7 +193,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             }).filter(Boolean));
         }
 
-        return aggregated;
+        // FINAL DEDUPLICATION (Safety Net)
+        // Use a Map to keep only the first occurrence of each ID
+        // This solves "Ghost" duplicates if they exist in multiple source arrays
+        const uniqueEvents = Array.from(new Map(aggregated.map(item => [item.id, item])).values());
+
+        return uniqueEvents;
     }, [events, spaRequests, leads, todos, groups, filters]);
 
     // --- HELPER FUNCTIONS ---
@@ -206,6 +241,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
     // --- DRAG & DROP LOGIC (Desktop) ---
     const handleDragStart = (e: React.DragEvent, event: CalendarEvent) => {
+        console.log('DEBUG: Drag Start. EVENT:', JSON.stringify(event, null, 2));
         e.dataTransfer.setData('eventId', event.id.toString());
         e.dataTransfer.effectAllowed = 'move';
     };
@@ -218,6 +254,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const handleDrop = (e: React.DragEvent, targetDate: Date, hour: number) => {
         e.preventDefault();
         const eventId = e.dataTransfer.getData('eventId');
+        console.log('DEBUG: Drop detected', eventId, targetDate, hour);
         processMove(eventId, targetDate, hour);
     };
 
@@ -278,24 +315,92 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
     // Shared Move Logic
     const processMove = (eventId: string, targetDate: Date, hour: number) => {
-        const eventToMove = events.find(ev => ev.id.toString() === eventId);
+        console.log('DEBUG: processMove ID:', eventId, 'Date:', targetDate, 'Hour:', hour);
 
-        if (eventToMove && onUpdateEvent) {
-            const newStart = new Date(targetDate);
-            newStart.setHours(hour);
-            newStart.setMinutes(0);
+        let realId = eventId;
 
-            const durationMs = new Date(eventToMove.end).getTime() - new Date(eventToMove.start).getTime();
-            const newEnd = new Date(newStart.getTime() + (isNaN(durationMs) ? 3600000 : durationMs));
+        // 1. Identify Source Type from ID Prefix
+        if (eventId.startsWith('task-') && onUpdateTask) {
+            realId = eventId.replace('task-', '');
+            const yyyy = targetDate.getFullYear();
+            const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(targetDate.getDate()).padStart(2, '0');
+            const dateStr = `${yyyy}-${mm}-${dd}`;
+            const timeStr = `${hour.toString().padStart(2, '0')}:00`;
+            onUpdateTask(realId, dateStr, timeStr);
+            return;
+        }
 
-            const updatedEvent = {
-                ...eventToMove,
-                start: newStart,
-                end: newEnd,
-                time: `${hour.toString().padStart(2, '0')}:00`
-            };
+        if (eventId.startsWith('lead-') && onUpdateLead) {
+            realId = eventId.replace('lead-', '');
+            const newDate = new Date(targetDate);
+            newDate.setHours(hour);
+            newDate.setMinutes(0);
+            onUpdateLead(realId, newDate.toISOString());
+            return;
+        }
 
-            onUpdateEvent(updatedEvent);
+        if (eventId.startsWith('spa-') && onUpdateSpaRequest) {
+            realId = eventId.replace('spa-', '');
+            const yyyy = targetDate.getFullYear();
+            const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(targetDate.getDate()).padStart(2, '0');
+            const dateStr = `${yyyy}-${mm}-${dd}`;
+            const timeStr = `${hour.toString().padStart(2, '0')}:00`;
+            onUpdateSpaRequest(realId, dateStr, timeStr);
+            return;
+        }
+
+        // 2. Default or Fallback: Calendar Event (My Agenda) OR Detection by content
+        // If we lost the prefix, let's try to find it in the event object itself
+        const eventToMove = events.find(ev => ev.id.toString() === eventId) ||
+            todos.find(t => t.id.toString() === eventId) ||
+            spaRequests.find(r => r.id.toString() === eventId);
+
+        if (!eventToMove) {
+            console.warn('DEBUG: Event not found for ID:', eventId);
+            return;
+        }
+
+        // HEURISTIC DETECTION (Safety Net)
+        if ((eventToMove as any).dueDate && onUpdateTask) {
+            console.log('DEBUG: Detected Task via property');
+            const yyyy = targetDate.getFullYear();
+            const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(targetDate.getDate()).padStart(2, '0');
+            onUpdateTask(eventToMove.id, `${yyyy}-${mm}-${dd}`, `${hour.toString().padStart(2, '0')}:00`);
+            return;
+        }
+
+        if ((eventToMove as any).clientName && onUpdateSpaRequest) {
+            console.log('DEBUG: Detected Spa via property');
+            const yyyy = targetDate.getFullYear();
+            const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(targetDate.getDate()).padStart(2, '0');
+            onUpdateSpaRequest(eventToMove.id, `${yyyy}-${mm}-${dd}`, `${hour.toString().padStart(2, '0')}:00`);
+            return;
+        }
+
+        // Default 'MY_AGENDA' type
+        if (onUpdateEvent) {
+            // ... existing logic for standard events
+            const ev = events.find(e => e.id.toString() === eventId);
+            if (ev) {
+                const newStart = new Date(targetDate);
+                newStart.setHours(hour);
+                newStart.setMinutes(0);
+
+                const durationMs = new Date(ev.end).getTime() - new Date(ev.start).getTime();
+                const newEnd = new Date(newStart.getTime() + (isNaN(durationMs) ? 3600000 : durationMs));
+
+                const updatedEvent = {
+                    ...ev,
+                    start: newStart,
+                    end: newEnd,
+                    time: `${hour.toString().padStart(2, '0')}:00`
+                };
+                onUpdateEvent(updatedEvent);
+            }
         }
     };
 
@@ -409,8 +514,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     {view === 'month' && (
                         <div className="grid grid-cols-7 auto-rows-fr h-full gap-1 md:gap-2">
                             {/* Weekday Headers */}
-                            {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(d => (
-                                <div key={d} className="text-center text-[10px] font-black uppercase text-slate-400 mb-2">{d}</div>
+                            {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
+                                <div key={`${d}-${i}`} className="text-center text-[10px] font-black uppercase text-slate-400 mb-2">{d}</div>
                             ))}
                             {/* Days */}
                             {getDaysInMonth(currentDate).map((d, i) => {
@@ -482,7 +587,21 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                     ))}
 
                                     {(view === 'day' ? [currentDate] : getWeekDays(currentDate)).map((d, colIdx) => {
-                                        const dayEvents = allEvents.filter(e => isThinkingDate(e.startObj, d));
+                                        // Filter events for this day (INCLUDING MULTI-DAY)
+                                        const dayEvents = allEvents.filter(e => {
+                                            if (e.endObj && e.source === 'GROUPS') {
+                                                // Check overlap for groups
+                                                const start = new Date(e.startObj);
+                                                start.setHours(0, 0, 0, 0);
+                                                const end = new Date(e.endObj);
+                                                end.setHours(23, 59, 59, 999);
+                                                const current = new Date(d);
+                                                current.setHours(12, 0, 0, 0); // Check mid-day to avoid boundary issues
+                                                return current >= start && current <= end;
+                                            }
+                                            return isThinkingDate(e.startObj, d);
+                                        });
+
                                         return (
                                             <div
                                                 key={colIdx}
@@ -529,21 +648,34 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                                     return (
                                                         <div
                                                             key={eIdx}
-                                                            draggable={e.source === 'MY_AGENDA'} // Only allow drag for my agenda items
-                                                            onDragStart={(evt) => handleDragStart(evt, e.original || e)}
-                                                            onTouchStart={(evt) => e.source === 'MY_AGENDA' && handleTouchStart(evt, e.original || e)}
+                                                            draggable={true} // Allow dragging for ALL types now
+                                                            onDragStart={(evt) => handleDragStart(evt, e)} // FIXED: Pass 'e' (aggregated) to keep 'task-' prefix in ID
+                                                            onTouchStart={(evt) => handleTouchStart(evt, e)} // FIXED: Pass 'e' for consistency
                                                             onTouchMove={handleTouchMove}
                                                             onTouchEnd={handleTouchEnd}
                                                             onClick={(evt) => {
                                                                 evt.stopPropagation();
-                                                                onEventClick(e.original || e);
+                                                                if (e.source === 'SPA' && onSpaClick) {
+                                                                    onSpaClick(e.original);
+                                                                } else if (e.source === 'TASKS' && onTaskClick) {
+                                                                    onTaskClick(e.original);
+                                                                } else if (e.source === 'CRM' && onLeadClick) {
+                                                                    onLeadClick(e.original);
+                                                                } else if (e.source === 'GROUPS') {
+                                                                    onGroupClick(e.original);
+                                                                } else {
+                                                                    onEventClick(e.original || e);
+                                                                }
                                                             }}
-                                                            className={`absolute left-0.5 right-0.5 md:left-1 md:right-1 p-1 md:p-2 rounded-xl border border-l-4 shadow-sm cursor-pointer hover:brightness-95 transition-all text-xs z-10 ${e.source === 'MY_AGENDA' ? 'cursor-move' : ''} ${e.lightBg} ${e.borderColor} ${e.color.replace('bg-', 'border-l-')}`}
+                                                            className={`absolute left-0.5 right-0.5 md:left-1 md:right-1 p-1 md:p-2 rounded-xl border border-l-4 shadow-sm cursor-pointer hover:brightness-95 transition-all text-xs z-10 cursor-move ${e.lightBg} ${e.borderColor} ${e.color.replace('bg-', 'border-l-')}`}
                                                             style={{ top: `${top}px`, height: '70px' }}
                                                         >
                                                             <div className={`font-bold ${e.textColor} flex items-center gap-1`}>
                                                                 {/* Grip Icon for Draggable */}
-                                                                {e.source === 'MY_AGENDA' && <div className="hidden md:block w-3 h-3 rounded-full bg-black/10 mr-1 cursor-grab" />}
+                                                                {/* Grip Icon for Draggable (ALL TYPES) */}
+                                                                <div className="mr-1 cursor-grab opacity-50 hover:opacity-100 flex-shrink-0" title="Déplacer">
+                                                                    <GripHorizontal size={14} />
+                                                                </div>
                                                                 {e.icon && <e.icon size={12} className="flex-shrink-0" />}
                                                                 <span className="truncate">{e.displayTime}</span>
                                                             </div>
