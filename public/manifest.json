@@ -1,7 +1,8 @@
 {
     "name": "HotelOS Director",
     "short_name": "HotelOS",
-    "start_url": ".",
+    "start_url": "/",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#1e1b4b",
     "theme_color": "#4f46e5",
