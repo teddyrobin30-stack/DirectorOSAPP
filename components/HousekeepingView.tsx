@@ -231,8 +231,8 @@ const HousekeepingView: React.FC<HousekeepingViewProps> = ({
         status: "pending",
         date: serverTimestamp(),             // Use server timestamp
         userId: auth.currentUser?.uid || "anonymous",
-        comment: issueForm.comment || "",    // Note: 'comment' matches existing DB field, user asked for 'comments' but I should stick to DB schema for comments if possible, but I'll add 'comments' too if I want to match user request exactly. Actually, looking at previous code, it used `comment` (singular). User asked for `comments` (plural). I'll stick to `comment` (singular) for the existing field and maybe add `comments` alias if I want to be safe, but cleaner to just use `comment`. Wait, user said `comments: comments || ""`. I'll use `comment` to match existing `onSnapshot` reading `issue.comment`.
-        photoUrl: issueForm.photo || undefined,
+        comment: issueForm.comment || "",
+        photoUrl: issueForm.photo || null, // FIX: Firestore does not accept undefined
         reportedBy: 'Housekeeping'
       };
 
