@@ -541,14 +541,6 @@ const HousekeepingView: React.FC<HousekeepingViewProps> = ({
                 </div>
               )}
             </div>
-
-            {/* DEBUG INFO */}
-            <div className="mt-8 p-4 bg-slate-100 dark:bg-slate-800 rounded-xl text-[10px] font-mono text-slate-400">
-              <p>App Version: v1.0.1 (Fix Types & Sync)</p>
-              <p>Raw Issues: {laundryIssues.length}</p>
-              <p>Filtered Issues: {filteredIssues.length}</p>
-              <p>Selected Filter: {selectedMonth} / {selectedType}</p>
-            </div>
           </div>
         )}
 
