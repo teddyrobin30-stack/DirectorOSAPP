@@ -329,6 +329,7 @@ export type LaundryType = 'Drap plat' | 'Housse couette' | 'Taie' | 'Serviette b
 export interface LaundryIssue {
   id: string;
   item: LaundryType;
+  type: LaundryType; // Added type to match usage in HousekeepingView
   quantity: number;
   room: string;
   status: 'pending' | 'resolved';

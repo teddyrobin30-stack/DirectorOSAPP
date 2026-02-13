@@ -58,10 +58,14 @@ const HousekeepingView: React.FC<HousekeepingViewProps> = ({
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const issues = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as LaundryIssue[];
+      const issues = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          date: data.date?.toDate ? data.date.toDate().toISOString() : (data.date || new Date().toISOString())
+        };
+      }) as LaundryIssue[];
       setLaundryIssues(issues);
       setIsLoading(false);
     }, (error) => {
