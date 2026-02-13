@@ -63,23 +63,24 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userSettings, onSave, onNav
             if (permission === 'granted') {
                 setNotifSettings(prev => ({ ...prev, pushEnabled: true }));
 
-                const title = "🔔 DirectorOS";
-                const options = {
-                    body: "Notifications activées avec succès !",
-                    icon: "/pwa-192x192.png",
-                    badge: "/pwa-192x192.png",
-                    vibrate: [200, 100, 200]
-                };
-
-                // ✅ ANDROID PWA SUPPORT: Use ServiceWorker if available
+                // ✅ LOGIQUE UTILISATEUR DEMANDÉE
                 if ('serviceWorker' in navigator && 'PushManager' in window) {
-                    navigator.serviceWorker.ready.then(registration => {
-                        registration.showNotification(title, options);
-                    });
+                    // Méthode PWA Android
+                    const registration = await navigator.serviceWorker.ready;
+                    registration.showNotification("🔔 DirectorOS", {
+                        body: "Notification Android PWA activée !",
+                        icon: "/pwa-192x192.svg",
+                        vibrate: [200, 100, 200],
+                        tag: "test-notif"
+                    } as any);
                 } else {
-                    // Fallback for Desktop/Safari without SW
-                    new Notification(title, options);
+                    // Méthode PC Classique Fallback
+                    new Notification("🔔 DirectorOS", {
+                        body: "Notifications activées (Desktop)",
+                        icon: "/pwa-192x192.svg"
+                    });
                 }
+
             } else {
                 setNotifSettings(prev => ({ ...prev, pushEnabled: false }));
                 alert("Permission refusée. Vérifiez les paramètres de votre navigateur.");
