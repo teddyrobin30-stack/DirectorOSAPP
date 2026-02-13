@@ -204,7 +204,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         setCurrentDate(newDate);
     };
 
-    // --- DRAG & DROP LOGIC ---
+    // --- DRAG & DROP LOGIC (Desktop) ---
     const handleDragStart = (e: React.DragEvent, event: CalendarEvent) => {
         e.dataTransfer.setData('eventId', event.id.toString());
         e.dataTransfer.effectAllowed = 'move';
@@ -218,12 +218,72 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const handleDrop = (e: React.DragEvent, targetDate: Date, hour: number) => {
         e.preventDefault();
         const eventId = e.dataTransfer.getData('eventId');
+        processMove(eventId, targetDate, hour);
+    };
+
+    // --- TOUCH DRAG LOGIC (Mobile) ---
+    const [draggingId, setDraggingId] = useState<string | null>(null);
+    const touchTimeout = React.useRef<any>(null);
+
+    const handleTouchStart = (e: React.TouchEvent, event: CalendarEvent) => {
+        // Long press to start dragging (500ms) to distinguish from scroll
+        const id = event.id.toString();
+        touchTimeout.current = setTimeout(() => {
+            setDraggingId(id);
+            // Haptic feedback if available (Mobile only)
+            if (navigator.vibrate) navigator.vibrate(50);
+        }, 300); // 300ms hold to drag
+    };
+
+    const handleTouchEnd = () => {
+        if (touchTimeout.current) clearTimeout(touchTimeout.current);
+        setDraggingId(null);
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!draggingId) return;
+        e.preventDefault(); // Prevent scrolling while dragging
+
+        // Find element under finger
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+
+        // Check if we are over a time slot
+        const slot = target?.closest('[data-hour]');
+        if (slot) {
+            const hour = parseInt(slot.getAttribute('data-hour') || '0');
+            const dateStr = slot.getAttribute('data-date');
+            if (!isNaN(hour) && dateStr) {
+                // Visual feedback could be added here
+            }
+        }
+    };
+
+    const handleTouchDrop = (e: React.TouchEvent) => {
+        if (!draggingId) return;
+        const touch = e.changedTouches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        const slot = target?.closest('[data-hour]');
+
+        if (slot) {
+            const hour = parseInt(slot.getAttribute('data-hour') || '0');
+            const dateStr = slot.getAttribute('data-date');
+
+            if (!isNaN(hour) && dateStr) {
+                processMove(draggingId, new Date(dateStr), hour);
+            }
+        }
+        setDraggingId(null);
+    };
+
+    // Shared Move Logic
+    const processMove = (eventId: string, targetDate: Date, hour: number) => {
         const eventToMove = events.find(ev => ev.id.toString() === eventId);
 
         if (eventToMove && onUpdateEvent) {
             const newStart = new Date(targetDate);
             newStart.setHours(hour);
-            newStart.setMinutes(0); // Snap to top of hour for simplicity
+            newStart.setMinutes(0);
 
             const durationMs = new Date(eventToMove.end).getTime() - new Date(eventToMove.start).getTime();
             const newEnd = new Date(newStart.getTime() + (isNaN(durationMs) ? 3600000 : durationMs));
@@ -432,10 +492,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                                 {Array.from({ length: 15 }, (_, i) => i + 7).map(h => (
                                                     <div
                                                         key={h}
-                                                        className="absolute inset-x-0 h-20 hover:bg-indigo-50/20 dark:hover:bg-indigo-900/20 transition-colors z-0"
+                                                        data-hour={h} // For Touch detection
+                                                        data-date={d.toISOString()} // For Touch detection
+                                                        className={`absolute inset-x-0 h-20 hover:bg-indigo-50/20 dark:hover:bg-indigo-900/20 transition-colors z-0 ${draggingId ? 'bg-indigo-50/10' : ''}`}
                                                         style={{ top: `${(h - 7) * 80}px` }}
                                                         onDragOver={handleDragOver}
                                                         onDrop={(e) => handleDrop(e, d, h)}
+                                                        onTouchEnd={handleTouchDrop} // Drop target
                                                     />
                                                 ))}
 
@@ -468,6 +531,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                                             key={eIdx}
                                                             draggable={e.source === 'MY_AGENDA'} // Only allow drag for my agenda items
                                                             onDragStart={(evt) => handleDragStart(evt, e.original || e)}
+                                                            onTouchStart={(evt) => e.source === 'MY_AGENDA' && handleTouchStart(evt, e.original || e)}
+                                                            onTouchMove={handleTouchMove}
+                                                            onTouchEnd={handleTouchEnd}
                                                             onClick={(evt) => {
                                                                 evt.stopPropagation();
                                                                 onEventClick(e.original || e);
