@@ -311,13 +311,31 @@ export interface ChatChannel {
   lastMessage?: string;
 }
 
+// --- MISSING HOUSEKEEPING TYPES ---
+export type RoomStatusFront = 'stayover' | 'departure' | 'arrival' | 'vacant';
+export type RoomStatusHK = 'not_started' | 'in_progress' | 'ready';
+
 export interface Room {
   id: string;
   number: string;
   floor: number;
   type: string;
-  statusFront: 'stayover' | 'departure' | 'arrival' | 'vacant';
-  statusHK: 'not_started' | 'in_progress' | 'ready';
+  statusFront: RoomStatusFront;
+  statusHK: RoomStatusHK;
+}
+
+export type LaundryType = 'Drap plat' | 'Housse couette' | 'Taie' | 'Serviette bain' | 'Tapis' | 'Peignoir' | 'Autre';
+
+export interface LaundryIssue {
+  id: string;
+  item: LaundryType;
+  quantity: number;
+  room: string;
+  status: 'pending' | 'resolved';
+  comment?: string;
+  photoUrl?: string | null;
+  reportedBy: string;
+  date: any; // Timestamp
 }
 
 export interface MaintenanceTicket {
@@ -325,17 +343,6 @@ export interface MaintenanceTicket {
   location: string;
   description: string;
   status: 'open' | 'in_progress' | 'resolved';
-  createdAt: string;
-}
-
-export interface SpaRequest {
-  id: string;
-  clientName: string;
-  phone: string;
-  date: string;
-  time: string;
-  treatment: string;
-  status: 'pending' | 'confirmed' | 'refused';
   createdAt: string;
 }
 
@@ -348,7 +355,6 @@ export interface InventoryItem { id: string; name: string; currentQty: number; }
 
 export type SpaStatus = 'pending' | 'confirmed' | 'refused';
 export type SpaRefusalReason = 'complet_cabine' | 'complet_soin' | 'contre_indication' | 'annulation' | 'autre';
-
 export type SpaSource = 'Direct' | 'Extérieur' | 'Weekendesk' | 'Thalasseo' | 'Sport Découverte' | 'Thalasso n°1' | 'Saisie Manuelle';
 
 export interface SpaRequest {
@@ -361,7 +367,7 @@ export interface SpaRequest {
   treatment: string;
   status: SpaStatus;
   refusalReason?: SpaRefusalReason; // Si refusé
-  source?: string; // NEW: Source de la réservation (Type string pour permettre "Saisie Manuelle" custom)
+  source?: string;
   createdAt: string;
 }
 
