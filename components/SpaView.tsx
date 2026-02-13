@@ -115,11 +115,22 @@ const SpaView: React.FC<SpaViewProps> = ({ userSettings, requests, onUpdateReque
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
         if (settings.pushEnabled && settings.newBooking && Notification.permission === 'granted') {
-          new Notification("💆 Nouveau Soin Réservé", {
+          const title = "💆 Nouveau Soin Réservé";
+          const options = {
             body: `Client : ${newRequest.clientName} - ${newRequest.time}`,
             icon: "/pwa-192x192.png",
+            badge: "/pwa-192x192.png",
+            vibrate: [200, 100, 200],
             silent: false
-          });
+          };
+
+          if ('serviceWorker' in navigator && 'PushManager' in window) {
+            navigator.serviceWorker.ready.then(registration => {
+              registration.showNotification(title, options);
+            });
+          } else {
+            new Notification(title, options);
+          }
         }
       }
     } catch (e) {

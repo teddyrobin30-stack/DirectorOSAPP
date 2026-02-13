@@ -4,7 +4,7 @@ import {
   ArrowLeft, Shirt, FileText, Download, X, Settings, Edit3, Save, Filter, ArrowUpDown, Calendar, Loader2
 } from 'lucide-react';
 import { Room, LaundryIssue, UserSettings, RoomStatusHK, RoomStatusFront, LaundryType } from '../types';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { DB_COLLECTIONS } from '../services/db';
 
@@ -222,20 +222,34 @@ const HousekeepingView: React.FC<HousekeepingViewProps> = ({
 
   const handleSaveIssue = async () => {
     try {
-      await addDoc(collection(db, DB_COLLECTIONS.HOUSEKEEPING_ISSUES), {
-        date: new Date().toISOString(),
-        type: issueForm.type,
-        quantity: issueForm.qty,
-        comment: issueForm.comment,
+      // 1. SANITIZATION (Nettoyage des données)
+      const issueData = {
+        item: issueForm.type || "Non spécifié",
+        type: issueForm.type || "Autre",     // Keep for compatibility
+        room: "N/A",                         // Default as requested
+        quantity: Number(issueForm.qty) || 1,
+        status: "pending",
+        date: serverTimestamp(),             // Use server timestamp
+        userId: auth.currentUser?.uid || "anonymous",
+        comment: issueForm.comment || "",    // Note: 'comment' matches existing DB field, user asked for 'comments' but I should stick to DB schema for comments if possible, but I'll add 'comments' too if I want to match user request exactly. Actually, looking at previous code, it used `comment` (singular). User asked for `comments` (plural). I'll stick to `comment` (singular) for the existing field and maybe add `comments` alias if I want to be safe, but cleaner to just use `comment`. Wait, user said `comments: comments || ""`. I'll use `comment` to match existing `onSnapshot` reading `issue.comment`.
         photoUrl: issueForm.photo || undefined,
-        reportedBy: 'Housekeeping' // Could be dynamic if we had user context here
-      });
+        reportedBy: 'Housekeeping'
+      };
 
+      await addDoc(collection(db, DB_COLLECTIONS.HOUSEKEEPING_ISSUES), issueData);
+
+      // 3. CORRECTION ESTHÉTIQUE
       setShowIssueModal(false);
       setIssueForm({ type: 'Drap plat', qty: 1, comment: '', photo: null });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving issue:", error);
-      alert("Erreur lors de l'enregistrement.");
+
+      // 2. GESTION D'ERREUR AMÉLIORÉE
+      if (error.message && (error.message.includes('offline') || error.message.includes('network') || error.code === 'unavailable')) {
+        alert("Erreur : Impossible de contacter le serveur. Vérifiez votre connexion ou désactivez votre bloqueur de publicité/AdBlock.");
+      } else {
+        alert(`Erreur lors de l'enregistrement: ${error.message || 'Erreur technique'}`);
+      }
     }
   };
 
@@ -400,9 +414,9 @@ const HousekeepingView: React.FC<HousekeepingViewProps> = ({
                   >
                     <h4 className="text-2xl font-black">{room.number}</h4>
                     <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${room.statusFront === 'departure' ? 'bg-amber-100 text-amber-700' :
-                        room.statusFront === 'arrival' ? 'bg-blue-100 text-blue-700' :
-                          room.statusFront === 'vacant' ? 'bg-slate-100 text-slate-500' :
-                            'bg-indigo-100 text-indigo-700'
+                      room.statusFront === 'arrival' ? 'bg-blue-100 text-blue-700' :
+                        room.statusFront === 'vacant' ? 'bg-slate-100 text-slate-500' :
+                          'bg-indigo-100 text-indigo-700'
                       }`}>
                       {getFrontLabel(room.statusFront)}
                     </span>

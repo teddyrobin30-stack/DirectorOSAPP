@@ -62,10 +62,24 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userSettings, onSave, onNav
             const permission = await Notification.requestPermission();
             if (permission === 'granted') {
                 setNotifSettings(prev => ({ ...prev, pushEnabled: true }));
-                new Notification("🔔 DirectorOS", {
+
+                const title = "🔔 DirectorOS";
+                const options = {
                     body: "Notifications activées avec succès !",
-                    icon: "/pwa-192x192.png" // Assumes generic icon exists or browser default
-                });
+                    icon: "/pwa-192x192.png",
+                    badge: "/pwa-192x192.png",
+                    vibrate: [200, 100, 200]
+                };
+
+                // ✅ ANDROID PWA SUPPORT: Use ServiceWorker if available
+                if ('serviceWorker' in navigator && 'PushManager' in window) {
+                    navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification(title, options);
+                    });
+                } else {
+                    // Fallback for Desktop/Safari without SW
+                    new Notification(title, options);
+                }
             } else {
                 setNotifSettings(prev => ({ ...prev, pushEnabled: false }));
                 alert("Permission refusée. Vérifiez les paramètres de votre navigateur.");
