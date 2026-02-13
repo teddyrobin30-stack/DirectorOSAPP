@@ -27,26 +27,41 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, contacts, onSa
   const durationPresets = ['15min', '30min', '1h', '2h', '3h'];
 
   useEffect(() => {
-    if (editEvent && isOpen) {
-      setTitle(editEvent.title);
-      const start = new Date(editEvent.start); // Handle potential timestamp
-      if (!isNaN(start.getTime())) {
-        setStartDate(start.toISOString().split('T')[0]);
-        setStartTime(editEvent.time);
+    if (isOpen) {
+      if (editEvent) {
+        setTitle(editEvent.title || '');
+        // Handle potential timestamp or string
+        let start = new Date();
+        if (editEvent.start && typeof editEvent.start === 'object' && editEvent.start.seconds) {
+          start = new Date(editEvent.start.seconds * 1000);
+        } else if (editEvent.start) {
+          start = new Date(editEvent.start);
+        }
+
+        if (!isNaN(start.getTime())) {
+          setStartDate(start.toISOString().split('T')[0]);
+        }
+        setStartTime(editEvent.time || '09:00');
+        setDuration(editEvent.duration || '1h');
+        setContactId(editEvent.linkedContactId?.toString() || '');
+        setType(editEvent.type === 'google' ? 'pro' : (editEvent.type as 'pro' | 'perso') || 'pro');
+        setVideoLink(editEvent.videoLink || '');
+      } else {
+        // Reset for new event
+        const now = new Date();
+        now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15);
+        if (now.getMinutes() >= 60) { now.setHours(now.getHours() + 1); now.setMinutes(0); }
+
+        setStartDate(now.toISOString().split('T')[0]);
+        setStartTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`);
+        setTitle('');
+        setDuration('1h');
+        setContactId('');
+        setType('pro');
+        setVideoLink('');
       }
-      setDuration(editEvent.duration);
-      setContactId(editEvent.linkedContactId?.toString() || '');
-      setType(editEvent.type === 'google' ? 'pro' : editEvent.type as 'pro' | 'perso');
-      setVideoLink(editEvent.videoLink || '');
-    } else if (!editEvent && isOpen) {
-      const now = new Date();
-      now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15);
-      if (now.getMinutes() >= 60) { now.setHours(now.getHours() + 1); now.setMinutes(0); }
-      setStartDate(now.toISOString().split('T')[0]);
-      setStartTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`);
-      setTitle(''); setDuration('1h'); setContactId(''); setType('pro'); setVideoLink('');
+      setIsSmsEditing(false);
     }
-    setIsSmsEditing(false);
   }, [editEvent, isOpen]);
 
   useEffect(() => {

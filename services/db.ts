@@ -37,7 +37,8 @@ const COLLECTIONS = {
   CONTACTS: 'user_contacts',
   DASHBOARD: 'user_dashboard',
   MESSAGES_PRIVATE: 'messages_private',
-  SPA_INVENTORY: 'spa_inventory'
+  SPA_INVENTORY: 'spa_inventory',
+  HOUSEKEEPING_ISSUES: 'housekeeping_issues'
 };
 
 // --- FONCTIONS D'ÉCRITURE GÉNÉRIQUES ---

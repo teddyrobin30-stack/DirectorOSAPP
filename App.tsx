@@ -121,8 +121,8 @@ const AuthenticatedApp: React.FC = () => {
   const {
     contacts, todos, groups, rooms, tickets, contracts, inventory, recipes,
     channels, events, leads, clients, inbox, logs, wakeups, taxis, lostItems,
-    spaRequests, laundryIssues, ratioItems, ratioCategories, allUsers,
-    setRooms, setTickets, setContracts, setLaundryIssues, setRecipes,
+    spaRequests, ratioItems, ratioCategories, allUsers,
+    setRooms, setTickets, setContracts, setRecipes,
     setRatioItems, setRatioCategories,
     spaInventory,
     setSpaInventory
@@ -447,6 +447,7 @@ const AuthenticatedApp: React.FC = () => {
                       groups={groups}
                       spaRequests={spaRequests}
                       leads={leads}
+                      onUpdateEvent={handleSaveEvent}
                     />
                   </PageTransition>
                   : <Navigate to="/" />
@@ -533,7 +534,7 @@ const AuthenticatedApp: React.FC = () => {
               <Route path="/housekeeping" element={
                 user.permissions.canViewHousekeeping ?
                   <PageTransition>
-                    <HousekeepingView userSettings={userSettings} rooms={rooms} onUpdateRooms={handleUpdateRooms} laundryIssues={laundryIssues} onUpdateLaundry={setLaundryIssues} onNavigate={(path) => navigate(path)} />
+                    <HousekeepingView userSettings={userSettings} rooms={rooms} onUpdateRooms={handleUpdateRooms} onNavigate={(path) => navigate(path)} />
                   </PageTransition>
                   : <Navigate to="/" />
               } />
@@ -700,9 +701,9 @@ const AuthenticatedApp: React.FC = () => {
             title: details.title,
             start: details.date ? new Date(details.date) : new Date(),
             end: details.date ? new Date(new Date(details.date).getTime() + 3600000) : new Date(Date.now() + 3600000),
-            allDay: false,
-            type: 'meeting',
-            attendees: []
+            time: details.date ? new Date(details.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '09:00',
+            duration: '1h',
+            type: 'pro',
           });
           setShowEventModal(true);
         }}

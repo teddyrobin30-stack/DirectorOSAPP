@@ -61,6 +61,7 @@ export interface CalendarEvent {
   id: string | number;
   title: string;
   start: any; // Firestore Timestamp, Date ou string
+  end?: any; // Firestore Timestamp, Date ou string (Added for DnD)
   time: string;
   duration: string;
   type: 'pro' | 'perso' | 'google';

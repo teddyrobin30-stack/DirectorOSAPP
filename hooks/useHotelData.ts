@@ -113,7 +113,6 @@ export const useHotelData = (user: any) => {
   const [taxis, setTaxis] = useState<TaxiBooking[]>([]);
   const [lostItems, setLostItems] = useState<LostItem[]>([]);
   const [spaRequests, setSpaRequests] = useState<SpaRequest[]>([]);
-  const [laundryIssues, setLaundryIssues] = useState<any[]>([]);
   const [ratioItems, setRatioItems] = useState<RatioItem[]>([]);
   const [ratioCategories, setRatioCategories] = useState<string[]>([]);
   const [spaInventory, setSpaInventory] = useState<SpaInventoryItem[]>([]);
@@ -284,8 +283,6 @@ export const useHotelData = (user: any) => {
     setLostItems,
     spaRequests,
     setSpaRequests,
-    laundryIssues,
-    setLaundryIssues,
     ratioItems,
     setRatioItems,
     ratioCategories,

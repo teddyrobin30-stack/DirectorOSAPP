@@ -17,13 +17,14 @@ interface CalendarViewProps {
     groups: Group[];
     spaRequests: SpaRequest[];
     leads: Lead[];
+    onUpdateEvent?: (event: CalendarEvent) => void;
 }
 
 type ViewType = 'day' | 'week' | 'month';
 type FilterType = 'MY_AGENDA' | 'SPA' | 'CRM' | 'TASKS' | 'GROUPS';
 
 const CalendarView: React.FC<CalendarViewProps> = ({
-    events, todos, userSettings, onAdd, onEventClick, onGroupClick, groups, spaRequests, leads
+    events, todos, userSettings, onAdd, onEventClick, onGroupClick, groups, spaRequests, leads, onUpdateEvent
 }) => {
     const [view, setView] = useState<ViewType>('week');
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -203,6 +204,41 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         setCurrentDate(newDate);
     };
 
+    // --- DRAG & DROP LOGIC ---
+    const handleDragStart = (e: React.DragEvent, event: CalendarEvent) => {
+        e.dataTransfer.setData('eventId', event.id.toString());
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = (e: React.DragEvent, targetDate: Date, hour: number) => {
+        e.preventDefault();
+        const eventId = e.dataTransfer.getData('eventId');
+        const eventToMove = events.find(ev => ev.id.toString() === eventId);
+
+        if (eventToMove && onUpdateEvent) {
+            const newStart = new Date(targetDate);
+            newStart.setHours(hour);
+            newStart.setMinutes(0); // Snap to top of hour for simplicity
+
+            const durationMs = new Date(eventToMove.end).getTime() - new Date(eventToMove.start).getTime();
+            const newEnd = new Date(newStart.getTime() + (isNaN(durationMs) ? 3600000 : durationMs));
+
+            const updatedEvent = {
+                ...eventToMove,
+                start: newStart,
+                end: newEnd,
+                time: `${hour.toString().padStart(2, '0')}:00`
+            };
+
+            onUpdateEvent(updatedEvent);
+        }
+    };
+
     const themeColor = userSettings.themeColor;
 
     return (
@@ -273,14 +309,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             <div className="flex-1 flex flex-col h-full overflow-hidden">
 
                 {/* HEADER */}
-                <div className={`px-6 py-4 flex justify-between items-center border-b ${userSettings.darkMode ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-white/50'} backdrop-blur-md`}>
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => setCurrentDate(new Date())} className="px-4 py-2 rounded-lg border text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 dark:border-slate-700">Aujourd'hui</button>
+                <div className={`px-4 md:px-6 py-4 flex justify-between items-center border-b ${userSettings.darkMode ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-white/50'} backdrop-blur-md`}>
+                    <div className="flex items-center gap-2 md:gap-4">
+                        <button onClick={() => setCurrentDate(new Date())} className="hidden md:block px-4 py-2 rounded-lg border text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 dark:border-slate-700">Aujourd'hui</button>
                         <div className="flex gap-1">
                             <button onClick={() => navigateDate(-1)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><ChevronLeft size={20} /></button>
                             <button onClick={() => navigateDate(1)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><ChevronRight size={20} /></button>
                         </div>
-                        <h2 className="text-xl font-black capitalize">
+                        <h2 className="text-lg md:text-xl font-black capitalize truncate max-w-[150px] md:max-w-none">
                             {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
                         </h2>
                     </div>
@@ -290,16 +326,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             <button
                                 key={v}
                                 onClick={() => setView(v as ViewType)}
-                                className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${view === v ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500'}`}
+                                className={`px-3 md:px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${view === v ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500'}`}
                             >
-                                {v === 'day' ? 'Jour' : v === 'week' ? 'Semaine' : 'Mois'}
+                                {v === 'day' ? 'Jour' : v === 'week' ? 'Sem' : 'Mois'}
                             </button>
                         ))}
                     </div>
                 </div>
 
                 {/* GRID */}
-                <div className="flex-1 overflow-y-auto no-scrollbar p-6">
+                <div className="flex-1 overflow-y-auto no-scrollbar p-2 md:p-6">
 
                     {/* EMPTY STATE */}
                     {allEvents.length === 0 && (
@@ -311,9 +347,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
                     {/* MONTH VIEW */}
                     {view === 'month' && (
-                        <div className="grid grid-cols-7 auto-rows-fr h-full gap-2">
+                        <div className="grid grid-cols-7 auto-rows-fr h-full gap-1 md:gap-2">
                             {/* Weekday Headers */}
-                            {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(d => (
+                            {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(d => (
                                 <div key={d} className="text-center text-[10px] font-black uppercase text-slate-400 mb-2">{d}</div>
                             ))}
                             {/* Days */}
@@ -323,7 +359,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                     <div
                                         key={i}
                                         onClick={() => { setCurrentDate(d); setView('day'); }}
-                                        className={`min-h-[100px] border rounded-2xl p-2 flex flex-col gap-1 cursor-pointer transition-all hover:border-${themeColor}-400 ${isThinkingDate(d, new Date()) ? 'bg-slate-50 dark:bg-slate-800/50' : ''} ${userSettings.darkMode ? 'border-slate-700' : 'border-slate-100'}`}
+                                        className={`min-h-[80px] md:min-h-[100px] border rounded-2xl p-1 md:p-2 flex flex-col gap-1 cursor-pointer transition-all hover:border-${themeColor}-400 ${isThinkingDate(d, new Date()) ? 'bg-slate-50 dark:bg-slate-800/50' : ''} ${userSettings.darkMode ? 'border-slate-700' : 'border-slate-100'}`}
                                     >
                                         <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${isThinkingDate(d, new Date()) ? `bg-${themeColor}-600 text-white` : ''}`}>
                                             {d.getDate()}
@@ -332,12 +368,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                         {/* Events Dots/Bars */}
                                         <div className="flex-1 flex flex-col gap-1 mt-1 overflow-hidden">
                                             {dayEvents.slice(0, 3).map((e, idx) => (
-                                                <div key={idx} className={`text-[9px] px-1.5 py-0.5 rounded truncate font-medium ${e.lightBg} ${e.textColor}`}>
+                                                <div key={idx} className={`text-[9px] px-1 md:px-1.5 py-0.5 rounded truncate font-medium ${e.lightBg} ${e.textColor} hidden md:block`}>
                                                     {e.title}
                                                 </div>
                                             ))}
+                                            {/* Mobile Dots */}
+                                            <div className="flex gap-0.5 md:hidden flex-wrap">
+                                                {dayEvents.map((_, idx) => (
+                                                    <div key={idx} className={`w-1.5 h-1.5 rounded-full bg-${themeColor}-500`}></div>
+                                                ))}
+                                            </div>
                                             {dayEvents.length > 3 && (
-                                                <span className="text-[9px] text-slate-400 font-bold pl-1">+{dayEvents.length - 3} autres</span>
+                                                <span className="text-[9px] text-slate-400 font-bold pl-1 hidden md:block">+{dayEvents.length - 3} autres</span>
                                             )}
                                         </div>
                                     </div>
@@ -350,11 +392,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     {(view === 'week' || view === 'day') && (
                         <div className="flex flex-col gap-4">
                             {/* Days Header */}
-                            <div className="flex ml-14">
+                            <div className="flex ml-10 md:ml-14">
                                 {(view === 'day' ? [currentDate] : getWeekDays(currentDate)).map((d, i) => (
                                     <div key={i} className={`flex-1 text-center py-2 border-b-2 ${isThinkingDate(d, new Date()) ? `border-${themeColor}-500 text-${themeColor}-600` : 'border-transparent'}`}>
                                         <span className="block text-[10px] uppercase font-bold text-slate-400">{d.toLocaleString('default', { weekday: 'short' })}</span>
-                                        <span className="block text-xl font-black">{d.getDate()}</span>
+                                        <span className="block text-lg md:text-xl font-black">{d.getDate()}</span>
                                     </div>
                                 ))}
                             </div>
@@ -362,7 +404,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             {/* Time Grid (Scrollable) */}
                             <div className="flex relative">
                                 {/* Time Labels */}
-                                <div className="w-14 flex flex-col gap-10 text-right pr-4 text-xs font-bold text-slate-400 pt-3">
+                                <div className="w-10 md:w-14 flex flex-col gap-10 text-right pr-2 md:pr-4 text-[10px] md:text-xs font-bold text-slate-400 pt-3">
                                     {Array.from({ length: 15 }, (_, i) => i + 7).map(h => ( // 07:00 to 21:00
                                         <div key={h} className="h-20">{h}:00</div>
                                     ))}
@@ -372,13 +414,31 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                 <div className="flex-1 flex relative">
                                     {/* Horizontal Grid Lines */}
                                     {Array.from({ length: 15 }, (_, i) => i + 7).map(h => (
-                                        <div key={h} className="absolute inset-x-0 h-[1px] bg-slate-100 dark:bg-slate-800" style={{ top: `${(h - 7) * 80}px` }} />
+                                        <div
+                                            key={h}
+                                            className="absolute inset-x-0 h-[1px] bg-slate-100 dark:bg-slate-800"
+                                            style={{ top: `${(h - 7) * 80}px` }}
+                                        />
                                     ))}
 
                                     {(view === 'day' ? [currentDate] : getWeekDays(currentDate)).map((d, colIdx) => {
                                         const dayEvents = allEvents.filter(e => isThinkingDate(e.startObj, d));
                                         return (
-                                            <div key={colIdx} className="flex-1 relative border-l border-slate-100 dark:border-slate-800 min-h-[1200px]">
+                                            <div
+                                                key={colIdx}
+                                                className="flex-1 relative border-l border-slate-100 dark:border-slate-800 min-h-[1200px]"
+                                            >
+                                                {/* Drop Zones for each hour */}
+                                                {Array.from({ length: 15 }, (_, i) => i + 7).map(h => (
+                                                    <div
+                                                        key={h}
+                                                        className="absolute inset-x-0 h-20 hover:bg-indigo-50/20 dark:hover:bg-indigo-900/20 transition-colors z-0"
+                                                        style={{ top: `${(h - 7) * 80}px` }}
+                                                        onDragOver={handleDragOver}
+                                                        onDrop={(e) => handleDrop(e, d, h)}
+                                                    />
+                                                ))}
+
                                                 {dayEvents.map((e, eIdx) => {
                                                     // Calculate Top offset based on time (simple parsing)
                                                     let hour = 9;
@@ -406,13 +466,20 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                                     return (
                                                         <div
                                                             key={eIdx}
-                                                            onClick={() => onEventClick(e.original || e)}
-                                                            className={`absolute left-1 right-1 p-2 rounded-xl border border-l-4 shadow-sm cursor-pointer hover:brightness-95 transition-all text-xs z-10 ${e.lightBg} ${e.borderColor} ${e.color.replace('bg-', 'border-l-')}`}
-                                                            style={{ top: `${top}px`, height: '70px' }} // Fixed height for visual simplicity for now
+                                                            draggable={e.source === 'MY_AGENDA'} // Only allow drag for my agenda items
+                                                            onDragStart={(evt) => handleDragStart(evt, e.original || e)}
+                                                            onClick={(evt) => {
+                                                                evt.stopPropagation();
+                                                                onEventClick(e.original || e);
+                                                            }}
+                                                            className={`absolute left-0.5 right-0.5 md:left-1 md:right-1 p-1 md:p-2 rounded-xl border border-l-4 shadow-sm cursor-pointer hover:brightness-95 transition-all text-xs z-10 ${e.source === 'MY_AGENDA' ? 'cursor-move' : ''} ${e.lightBg} ${e.borderColor} ${e.color.replace('bg-', 'border-l-')}`}
+                                                            style={{ top: `${top}px`, height: '70px' }}
                                                         >
                                                             <div className={`font-bold ${e.textColor} flex items-center gap-1`}>
-                                                                {e.icon && <e.icon size={12} />}
-                                                                {e.displayTime}
+                                                                {/* Grip Icon for Draggable */}
+                                                                {e.source === 'MY_AGENDA' && <div className="hidden md:block w-3 h-3 rounded-full bg-black/10 mr-1 cursor-grab" />}
+                                                                {e.icon && <e.icon size={12} className="flex-shrink-0" />}
+                                                                <span className="truncate">{e.displayTime}</span>
                                                             </div>
                                                             <div className="font-semibold truncate leading-tight mt-0.5">{e.title}</div>
                                                         </div>
