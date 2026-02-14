@@ -103,7 +103,7 @@ const MaintenanceView: React.FC<MaintenanceViewProps> = ({
       description: newTicket.desc,
       status: 'open',
       createdAt: new Date().toISOString(),
-      photoUrl: newTicket.photo || undefined
+      photoUrl: newTicket.photo || undefined // cleanData will handle this
     };
 
     if (onCreateTicket) {

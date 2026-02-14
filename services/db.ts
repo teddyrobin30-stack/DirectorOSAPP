@@ -44,14 +44,37 @@ const COLLECTIONS = {
 // --- FONCTIONS D'ÉCRITURE GÉNÉRIQUES ---
 
 /**
+ * Recursively removes undefined values from an object
+ * Firestore throws detailed errors if undefined is passed.
+ */
+const cleanData = (data: any): any => {
+  if (data === null || typeof data !== 'object') return data;
+
+  const cleaned: any = Array.isArray(data) ? [] : {};
+
+  Object.keys(data).forEach(key => {
+    const value = data[key];
+    if (value !== undefined) {
+      cleaned[key] = cleanData(value);
+    }
+  });
+
+  return cleaned;
+};
+
+/**
  * Sauvegarde ou Met à jour un document
  */
 export const saveDocument = async (collectionName: string, data: any) => {
   try {
     if (!data.id) throw new Error("Document must have an ID");
     const docRef = doc(db, collectionName, String(data.id));
+
+    // Sanitize data to remove undefined values
+    const cleanedData = cleanData(data);
+
     // On utilise { merge: true } pour ne pas écraser les champs existants si partiel
-    await setDoc(docRef, data, { merge: true });
+    await setDoc(docRef, cleanedData, { merge: true });
     return true;
   } catch (error) {
     console.error(`Error saving to ${collectionName}:`, error);
