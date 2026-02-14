@@ -16,7 +16,7 @@ import {
 // --- TYPES & SERVICES ---
 import {
   Contact, Task, Group, CalendarEvent, UserSettings, BusinessConfig,
-  CatalogItem, Venue, Client, ChatMessage, Room, MaintenanceTicket, SpaRequest, Lead
+  CatalogItem, Venue, Client, ChatMessage, Room, MaintenanceTicket, MaintenanceContract, SpaRequest, Lead
 } from './types';
 import { AuthProvider, useAuth } from './services/authContext';
 import {
@@ -209,6 +209,21 @@ const AuthenticatedApp: React.FC = () => {
   const handleUpdateTicket = (ticket: MaintenanceTicket) => {
     setTickets(prev => prev.map(t => t.id === ticket.id ? ticket : t));
     saveDocument(DB_COLLECTIONS.MAINTENANCE, ticket);
+  };
+
+  const handleCreateContract = (contract: MaintenanceContract) => {
+    setContracts(prev => [...prev, contract]);
+    saveDocument(DB_COLLECTIONS.MAINTENANCE, contract);
+  };
+
+  const handleUpdateContract = (contract: MaintenanceContract) => {
+    setContracts(prev => prev.map(c => c.id === contract.id ? contract : c));
+    saveDocument(DB_COLLECTIONS.MAINTENANCE, contract);
+  };
+
+  const handleDeleteContract = (contractId: string) => {
+    setContracts(prev => prev.filter(c => c.id !== contractId));
+    deleteDocument(DB_COLLECTIONS.MAINTENANCE, contractId);
   };
 
   const handleSaveContact = (contact: Contact) => {
@@ -669,14 +684,17 @@ const AuthenticatedApp: React.FC = () => {
                   <PageTransition>
                     <MaintenanceView
                       userSettings={userSettings}
-                      userRole={user.role}
+                      userRole={user?.role}
                       tickets={tickets}
                       contracts={contracts}
                       onUpdateTickets={handleUpdateTickets}
                       onUpdateContracts={setContracts}
-                      onNavigate={(path) => navigate(path)}
                       onCreateTicket={handleCreateTicket}
                       onUpdateTicket={handleUpdateTicket}
+                      onCreateContract={handleCreateContract}
+                      onUpdateContract={handleUpdateContract}
+                      onDeleteContract={handleDeleteContract}
+                      onNavigate={(tab) => navigate(`/${tab}`)}
                     />
                   </PageTransition>
                   : <Navigate to="/" />

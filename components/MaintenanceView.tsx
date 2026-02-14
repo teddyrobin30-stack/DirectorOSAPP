@@ -17,13 +17,16 @@ interface MaintenanceViewProps {
   onNavigate: (tab: string) => void;
   onCreateTicket?: (ticket: MaintenanceTicket) => void;
   onUpdateTicket?: (ticket: MaintenanceTicket) => void;
+  onCreateContract?: (contract: MaintenanceContract) => void;
+  onUpdateContract?: (contract: MaintenanceContract) => void;
+  onDeleteContract?: (contractId: string) => void;
 }
 
 const LOCATIONS: MaintenanceLocation[] = ['Chambres', 'Hall', 'Cuisine', 'Extérieur', 'Spa', 'Technique', 'Autre'];
 
 const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   userSettings, userRole, tickets, contracts, onUpdateTickets, onUpdateContracts, onNavigate,
-  onCreateTicket, onUpdateTicket
+  onCreateTicket, onUpdateTicket, onCreateContract, onUpdateContract, onDeleteContract
 }) => {
   const [activeTab, setActiveTab] = useState<'tickets' | 'contracts'>('tickets');
 
@@ -148,21 +151,42 @@ const MaintenanceView: React.FC<MaintenanceViewProps> = ({
       frequency: contractForm.frequency,
       annualCost: contractForm.annualCost
     };
-    onUpdateContracts([...contracts, contract]);
+
+    if (onCreateContract) {
+      onCreateContract(contract);
+    } else {
+      onUpdateContracts([...contracts, contract]);
+    }
+
     setShowNewContract(false);
     resetContractForm();
   };
 
   const handleUpdateContract = () => {
     if (!selectedContractId || !contractForm.providerName) return;
-    const updatedContracts = contracts.map(c => c.id === selectedContractId ? { ...c, ...contractForm } as MaintenanceContract : c);
-    onUpdateContracts(updatedContracts);
+
+    // Merge existing contract with form data
+    const existing = contracts.find(c => c.id === selectedContractId);
+    if (!existing) return;
+
+    const updatedContract = { ...existing, ...contractForm } as MaintenanceContract;
+
+    if (onUpdateContract) {
+      onUpdateContract(updatedContract);
+    } else {
+      const updatedContracts = contracts.map(c => c.id === selectedContractId ? updatedContract : c);
+      onUpdateContracts(updatedContracts);
+    }
     setIsEditingContract(false);
   };
 
   const deleteContract = (id: string) => {
     if (confirm("Supprimer ce contrat ?")) {
-      onUpdateContracts(contracts.filter(c => c.id !== id));
+      if (onDeleteContract) {
+        onDeleteContract(id);
+      } else {
+        onUpdateContracts(contracts.filter(c => c.id !== id));
+      }
       if (selectedContractId === id) setSelectedContractId(null);
     }
   };
