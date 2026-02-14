@@ -476,12 +476,11 @@ const AuthenticatedApp: React.FC = () => {
       <div className="flex-1 w-full overflow-y-auto no-scrollbar pb-28 md:pb-0 h-[calc(100vh-80px)] md:h-screen">
         <div className="max-w-7xl mx-auto w-full h-full">
           <AnimatePresence mode='wait'>
-            <Routes location={location} key={location.pathname}>
-
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Routes>
 
               <Route
-                path="/dashboard"
+                path="/"
+                index
                 element={
                   <PageTransition>
                     <MainDashboard
@@ -786,7 +785,7 @@ const AuthenticatedApp: React.FC = () => {
                 (user.role === 'admin' || user.role === 'manager') ?
                   <PageTransition>
                     <AdminPanelView userSettings={userSettings} onNavigate={(path) => navigate(path)} />
-                  </PageTransition> : <Navigate to="/dashboard" />
+                  </PageTransition> : <Navigate to="/" />
               } />
 
             </Routes>
