@@ -38,7 +38,7 @@ const MobileNavBar: React.FC<MobileNavBarProps> = ({ userSettings, totalUnread =
         { to: '/housekeeping', icon: BedDouble, label: 'Hébergement', access: user.permissions.canViewHousekeeping },
         { to: '/maintenance', icon: Wrench, label: 'Maintenance', access: user.permissions.canViewMaintenance },
         { to: '/spa', icon: Flower2, label: 'Spa', access: user.permissions.canViewSpa },
-        { to: '/fnb/kitchen', icon: UtensilsCrossed, label: 'Gestion F&B', access: user.permissions.canViewFnb },
+        { to: '/fnb', icon: UtensilsCrossed, label: 'Gestion F&B', access: user.permissions.canViewFnb },
         { to: '/admin', icon: ShieldCheck, label: 'Administration', access: isAdminOrManager },
         { to: '/settings', icon: Settings, label: 'Paramètres', access: true },
     ];
