@@ -488,9 +488,10 @@ const AuthenticatedApp: React.FC = () => {
           <AnimatePresence mode='wait'>
             <Routes>
 
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
               <Route
-                path="/"
-                index
+                path="/dashboard"
                 element={
                   <PageTransition>
                     <MainDashboard
