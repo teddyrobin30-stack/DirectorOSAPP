@@ -478,8 +478,10 @@ const AuthenticatedApp: React.FC = () => {
           <AnimatePresence mode='wait'>
             <Routes location={location} key={location.pathname}>
 
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
               <Route
-                path="/"
+                path="/dashboard"
                 element={
                   <PageTransition>
                     <MainDashboard
@@ -784,7 +786,7 @@ const AuthenticatedApp: React.FC = () => {
                 (user.role === 'admin' || user.role === 'manager') ?
                   <PageTransition>
                     <AdminPanelView userSettings={userSettings} onNavigate={(path) => navigate(path)} />
-                  </PageTransition> : <Navigate to="/" />
+                  </PageTransition> : <Navigate to="/dashboard" />
               } />
 
             </Routes>

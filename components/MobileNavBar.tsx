@@ -25,7 +25,7 @@ const MobileNavBar: React.FC<MobileNavBarProps> = ({ userSettings, totalUnread =
 
     // MAIN TABS (Bottom Bar)
     const mainTabs = [
-        { to: '/', icon: Home, label: 'Accueil', end: true },
+        { to: '/dashboard', icon: Home, label: 'Accueil', end: true },
         { to: '/todo', icon: CheckSquare, label: 'Tâches' },
         { to: '/agenda', icon: CalendarIcon, label: 'Agenda' },
         { to: '/messaging', icon: MessageSquare, label: 'Messages', badge: totalUnread },

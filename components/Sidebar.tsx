@@ -22,7 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ userSettings, totalUnread = 0 }) => {
     const isAdminOrManager = user.role === 'admin' || user.role === 'manager';
 
     const group1 = [
-        { to: '/', icon: Home, label: 'Accueil', access: true, end: true },
+        { to: '/dashboard', icon: Home, label: 'Accueil', access: true, end: true },
         { to: '/todo', icon: CheckSquare, label: 'Tâches', access: true },
         { to: '/agenda', icon: CalendarIcon, label: 'Agenda', access: user.permissions.canViewAgenda },
         { to: '/contacts', icon: Users, label: 'VIP / Contacts', access: true },
