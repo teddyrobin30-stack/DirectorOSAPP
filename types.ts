@@ -432,6 +432,7 @@ export interface MaintenanceContract {
   // Interventions
   lastIntervention?: string;
   nextIntervention?: string;
+  createdAt?: string;
 }
 export interface LogEntry {
   id: string; date: string; message: string; author: string; category: 'info' | 'alert' | 'task';

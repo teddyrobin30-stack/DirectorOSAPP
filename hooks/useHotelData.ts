@@ -137,7 +137,7 @@ export const useHotelData = (user: any) => {
         const c = data.filter((d: any) => d.providerName) as MaintenanceContract[];
         setTickets(t);
         setContracts(c);
-      }, 50)
+      })
     );
 
     // OPTIMISATION: Chargement UNIQUE pour l'inventaire (pas de temps réel)

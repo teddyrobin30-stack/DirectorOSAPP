@@ -149,7 +149,8 @@ const MaintenanceView: React.FC<MaintenanceViewProps> = ({
       startDate: contractForm.startDate,
       endDate: contractForm.endDate,
       frequency: contractForm.frequency,
-      annualCost: contractForm.annualCost
+      annualCost: contractForm.annualCost,
+      createdAt: new Date().toISOString()
     };
 
     if (onCreateContract) {
