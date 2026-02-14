@@ -198,7 +198,17 @@ const AuthenticatedApp: React.FC = () => {
 
   const handleUpdateTickets = (newTickets: MaintenanceTicket[]) => {
     setTickets(newTickets);
-    newTickets.forEach(t => saveDocument(DB_COLLECTIONS.MAINTENANCE, t));
+    // Deprecated: newTickets.forEach(t => saveDocument(DB_COLLECTIONS.MAINTENANCE, t));
+  };
+
+  const handleCreateTicket = (ticket: MaintenanceTicket) => {
+    setTickets(prev => [ticket, ...prev]);
+    saveDocument(DB_COLLECTIONS.MAINTENANCE, ticket);
+  };
+
+  const handleUpdateTicket = (ticket: MaintenanceTicket) => {
+    setTickets(prev => prev.map(t => t.id === ticket.id ? ticket : t));
+    saveDocument(DB_COLLECTIONS.MAINTENANCE, ticket);
   };
 
   const handleSaveContact = (contact: Contact) => {
@@ -656,7 +666,17 @@ const AuthenticatedApp: React.FC = () => {
               <Route path="/maintenance" element={
                 user.permissions.canViewMaintenance ?
                   <PageTransition>
-                    <MaintenanceView userSettings={userSettings} userRole={user.role} tickets={tickets} contracts={contracts} onUpdateTickets={handleUpdateTickets} onUpdateContracts={setContracts} onNavigate={(path) => navigate(path)} />
+                    <MaintenanceView
+                      userSettings={userSettings}
+                      userRole={user.role}
+                      tickets={tickets}
+                      contracts={contracts}
+                      onUpdateTickets={handleUpdateTickets}
+                      onUpdateContracts={setContracts}
+                      onNavigate={(path) => navigate(path)}
+                      onCreateTicket={handleCreateTicket}
+                      onUpdateTicket={handleUpdateTicket}
+                    />
                   </PageTransition>
                   : <Navigate to="/" />
               } />

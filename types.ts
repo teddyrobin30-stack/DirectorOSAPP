@@ -352,12 +352,16 @@ export interface LaundryIssue {
   date: any; // Timestamp
 }
 
+export type MaintenanceLocation = 'Chambres' | 'Hall' | 'Cuisine' | 'Extérieur' | 'Spa' | 'Technique' | 'Autre';
+export type MaintenanceStatus = 'open' | 'in_progress' | 'resolved';
+
 export interface MaintenanceTicket {
   id: string | number;
-  location: string;
+  location: MaintenanceLocation;
   description: string;
-  status: 'open' | 'in_progress' | 'resolved';
+  status: MaintenanceStatus;
   createdAt: string;
+  photoUrl?: string; // ✅ Added
 }
 
 // Stubs pour éviter les erreurs d'import
@@ -401,8 +405,33 @@ export interface SpaInventoryItem {
 }
 
 // --- MISSING TYPES ADDED ---
+export type ContractStatus = 'active' | 'expired' | 'renew';
+
 export interface MaintenanceContract {
-  id: string; providerName: string; description: string; startDate: string; endDate: string; status: 'active' | 'expired';
+  id: string;
+  providerName: string;
+  subject: string; // Used instead of description? Or kept alongside?
+  description?: string; // Keep for compatibility if needed
+  startDate?: string;
+  endDate?: string;
+  status: ContractStatus;
+
+  // Contacts
+  contactPhone?: string;
+  contactEmail?: string;
+  salesContact?: { name: string; phone: string; email: string };
+  technicalContact?: { name: string; phone: string };
+
+  // Info
+  address?: string;
+  website?: string;
+  siret?: string;
+  frequency?: string;
+  annualCost?: number;
+
+  // Interventions
+  lastIntervention?: string;
+  nextIntervention?: string;
 }
 export interface LogEntry {
   id: string; date: string; message: string; author: string; category: 'info' | 'alert' | 'task';
